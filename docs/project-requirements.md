@@ -45,27 +45,33 @@ A system that integrates with Humata.ai's API to automatically import and proces
 ## Technical Requirements
 
 ### Technology Stack
-- **Language**: [To be researched - Python likely optimal for API libraries, Ruby as fallback]
+- **Language**: Ruby (chosen based on team experience and research)
 - **APIs**: 
-  - Google Drive API v3
-  - Humata.ai REST API (requires research for capabilities)
-- **Authentication**: Environment variables for API credentials
+  - Google Drive API v3 (using Service Account authentication)
+  - Humata.ai REST API
+- **Authentication**: 
+  - Service Account for Google Drive API (automated, no user interaction)
+  - Environment variables for API credentials
+- **Libraries**:
+  - `google-api-client` gem (official Google library for Drive API)
 - **Logging**: Structured logging with different levels
 
 ### Dependencies
-- Google Drive API client library
-- Humata.ai API client/HTTP library (or general HTTP client)
-- Configuration management
+- `google-api-client` gem (official Google Drive API library)
+- Standard Ruby HTTP library (for Humata.ai API calls)
+- `optparse` (built-in Ruby library for CLI argument parsing)
+- Configuration management for credentials
 - Error handling framework
 - Data tracking/persistence for validation
 
 ## API Integration Details
 
 ### Google Drive API
-- **Authentication**: Service Account or OAuth 2.0
+- **Authentication**: Service Account (chosen for automation-friendly approach)
 - **Permissions**: Read access to publicly shared files
-- **Rate Limits**: [To be researched and documented]
-- **File Discovery**: Support for file IDs and folder traversal
+- **Rate Limits**: 100 requests/100 seconds/user (sufficient for our needs)
+- **File Discovery**: Support for file IDs and folder traversal using `files.list` API
+- **Library**: `google-api-client` gem
 
 ### Humata.ai API
 - **Authentication**: API key based (environment variable)
@@ -190,29 +196,30 @@ A system that integrates with Humata.ai's API to automatically import and proces
 6. **✅ No Local Storage**: Perfect match for project requirements
 
 ### ⚠️ Remaining Items to Investigate
-1. **Google Drive Compatibility**: Test if Google Drive URLs work with import API
-2. **Rate Limits**: Review limits in OpenAPI specifications
-3. **Bulk Operations**: Determine support for folder/batch imports
+1. ✅ **Google Drive Compatibility**: Test if Google Drive URLs work with import API
+2. ✅ **Rate Limits**: The Humata API rate limit is 120 requests/minute by default ([source](https://docs.humata.ai/guides/humata-api/faq)). This can be increased by request.
+3. ✅ **Bulk Operations**: The Humata API does not support bulk operations; files must be imported individually.
 4. **Status Polling**: Study tracking mechanisms in API specs
 
 ### 🔄 Secondary Questions
-1. **Programming Language**: Python vs Ruby - no Humata preference indicated, comparison still needed
-2. **Google Drive Authentication**: Service Account vs OAuth for folder crawling?
-3. **Concurrent Operations**: How many parallel operations should we support?
-4. **CLI Implementation**: What CLI framework/library should we use for robust switch handling?
+1. ✅ Programming Language: Ruby (chosen based on team experience and research)
+2. ✅ Google Drive Authentication: Service Account (chosen for automation-friendly approach)
+3. Concurrent Operations: How many parallel operations should we support?
+4. ✅ CLI Implementation: OptionParser (Ruby built-in library for CLI switches)
 
 ## Next Steps - Updated Based on Research
 
-### ✅ **PHASE 0: API Research - MAJOR PROGRESS**
-1. **✅ Documentation Found**: Complete API docs with OpenAPI specs located
-2. **✅ Python Confirmed**: Optimal language choice confirmed
+### ✅ **PHASE 0: API Research - COMPLETE**
+1. ✅ Documentation Found: Complete API docs with OpenAPI specs located
+2. ✅ Ruby Chosen: Language and libraries selected based on research
+3. ✅ Google Drive Research: API calls and authentication method determined
 
 **Next Immediate Steps**:
-1. **Access OpenAPI Specifications**: Review technical details
-2. **Study Import Endpoint**: Understand "How to Import Document"
-3. **Setup Development Environment**: Python environment with dependencies
-4. **Obtain API Credentials**: Get API key for testing
-5. **Test Google Drive Compatibility**: Verify URL import works
+2. ✅ Study Import Endpoint: Understand "How to Import Document"
+3. Setup Development Environment: Ruby environment with `google-api-client` gem
+4. Setup Google Cloud Project: Create project, enable Drive API, create Service Account (**PENDING**)
+5. ✅ Obtain Humata API Credentials
+6. ✅ Test Google Drive Compatibility: Verify URL import works
 
 ### 📋 **PHASE 1: Proof of Concept (AFTER API CONFIRMATION)**
 1. **Google Drive Integration**:
