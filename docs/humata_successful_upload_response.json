@@ -1,0 +1,27 @@
+{
+  "data": {
+    "pdf": {
+      "id": "22a6c4b2-caf3-4f8e-8217-6525b0afc3bd",
+      "created_by": "9dc30c38-341a-4e4c-ad9e-d0c61c9e4623",
+      "path": "9dc30c38-341a-4f8e-8217-6525b0afc3bd/3abc527f-86de-4f4c-b84f-da6a12c02013.pdf",
+      "name": "ANONYMIZED_NAME.pdf",
+      "read_status": "UPLOADED",
+      "created_at": "2025-08-01T20:32:50.381574+00:00",
+      "updated_at": "2025-08-01T20:32:50.381574+00:00",
+      "number_of_pages": null,
+      "deleted": false,
+      "processing_engine_version": null,
+      "successful_at": null,
+      "reading_at": null,
+      "organization_id": "925eb9da-554d-45fc-90af-b0c4a791d56b",
+      "folder_id": "79f200c9-feb9-498e-a437-7c7297d09eca",
+      "converted_from_path": null,
+      "version": 1.3,
+      "page_screenshots_completed": false,
+      "website_import_job_id": null,
+      "from_url": "ANONYMIZED_URL",
+      "file_type": "PDF",
+      "gcs_uri": null
+    }
+  }
+}
