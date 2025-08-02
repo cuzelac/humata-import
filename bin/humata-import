@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+# bin/humata-import
+require_relative '../lib/humata_import/cli'
+
+HumataImport::CLI.new.run(ARGV)

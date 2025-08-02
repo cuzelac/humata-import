@@ -92,7 +92,7 @@ module HumataImport
 end
 ```
 
-### Deliverable 3: CLI Framework
+### Deliverable 3: CLI Framework [✅ Completed 2024-06-10]
 Build command routing and argument parsing
 
 **Files to create:**
@@ -131,8 +131,10 @@ end
 
 **Goal**: Implement the discover command for crawling Google Drive folders
 
-### Deliverable 1: Google Drive API Client
+### Deliverable 1: Google Drive API Client [✅ Completed 2024-06-10]
 Build service account authentication and folder crawling
+
+*Implemented: GdriveClient supports service account authentication and recursive folder crawling using the Google Drive API. Extracts file metadata (id, name, mimeType, webContentLink, size) for all files in a folder tree. Note: Implementation uses recursion; for very deep folder trees, an iterative approach may be needed due to Ruby's lack of tail call optimization.*
 
 **Files to create:**
 - `lib/humata_import/clients/gdrive_client.rb` - Google Drive API wrapper
@@ -225,7 +227,7 @@ class Upload < Base
   def execute(options)
     # Query pending files from database
     # Upload in batches with concurrency control
-    # Store full API responses in humata_response field
+    # Store full API responses in humata_import_response field
     # Update file records with Humata IDs and folder IDs
     # Report progress
   end
@@ -257,7 +259,7 @@ class Verify < Base
   def execute(options)
     # Query uploaded files from database
     # Poll Humata API for processing status
-    # Update processing_status in database
+    # Update processing_status and humata_verification_response in database
     # Handle timeouts and polling intervals
     # Report final status summary
   end
