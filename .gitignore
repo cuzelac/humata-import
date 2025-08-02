@@ -1,2 +1,28 @@
 .cursor/rules
 load_secrets.sh
+
+# Ruby
+*.gem
+*.rbc
+.bundle
+.config
+.yardoc
+_yardoc
+coverage/
+doc/
+lib/bundler/man/
+
+# SQLite databases
+*.db
+*.sqlite3
+
+# Credentials
+*.json
+.env
+
+# Logs
+log/
+*.log
+
+# Byebug command history
+.byebug_history
