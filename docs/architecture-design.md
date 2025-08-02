@@ -132,7 +132,8 @@ CREATE TABLE file_records (
   upload_status TEXT DEFAULT 'pending',
   processing_status TEXT,
   last_error TEXT,
-  humata_response TEXT,
+  humata_response TEXT, -- legacy or for status endpoint
+  humata_import_response TEXT, -- full API response from import-url
   discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   uploaded_at DATETIME,
   completed_at DATETIME,
@@ -170,7 +171,7 @@ CREATE INDEX idx_files_humata_id ON file_records(humata_id);
 ### Phase 2: Upload (Idempotent)
 1. Query pending files from database
 2. Upload files to Humata API in batches
-3. Record full Humata API response in `humata_response` field
+3. Record full Humata API response in `humata_import_response` field (and keep `humata_response` for backward compatibility or status endpoint responses)
 4. Update file records with Humata IDs, folder ID, and status
 5. **Idempotent**: Re-running will only upload files not yet uploaded
 
