@@ -1,0 +1,107 @@
+---
+description: Establishes best practices for Ruby method and class design
+globs: *.rb
+alwaysApply: false
+---
+# Ruby Method and Class Design Rule
+
+## Description
+This rule establishes best practices for designing methods and classes in Ruby, focusing on maintainability, readability, and the Single Responsibility Principle.
+
+## Rule
+When designing Ruby methods and classes:
+
+1. **Method Design**
+   - Methods MUST do one thing and do it well
+   - Maximum method length: 15 lines
+   - Maximum of 3 parameters for any method
+   - Use keyword arguments for methods with multiple parameters
+   - Return values MUST be consistent and well-defined
+   - Avoid side effects in query methods
+
+2. **Class Design**
+   - Follow Single Responsibility Principle
+   - Maximum class length: 100 lines
+   - Use composition over inheritance
+   - Keep instance variables minimal
+   - Use modules for shared behavior
+   - Implement `to_s` for important domain objects
+
+3. **Method Naming**
+   - Use verbs for action methods
+   - Use nouns for attribute accessors
+   - Use `?` suffix for boolean methods
+   - Use `!` suffix for dangerous or mutating methods
+   - Prefix private methods with underscore
+
+4. **Object Composition**
+   - Use dependency injection
+   - Avoid global state
+   - Use service objects for complex operations
+   - Keep relationships explicit
+
+## Examples
+
+✅ Good:
+```ruby
+class OrderProcessor
+  def initialize(payment_gateway:, notifier:)
+    @payment_gateway = payment_gateway
+    @notifier = notifier
+  end
+
+  def process(order, user)
+    return false unless valid?(order)
+    
+    charge_payment(order)
+    notify_user(user)
+    true
+  end
+
+  private
+
+  def valid?(order)
+    order.items.any? && order.total.positive?
+  end
+
+  def charge_payment(order)
+    @payment_gateway.charge(
+      amount: order.total,
+      currency: order.currency
+    )
+  end
+
+  def notify_user(user)
+    @notifier.send_confirmation(user)
+  end
+end
+```
+
+❌ Bad:
+```ruby
+class OrderProcessor
+  def process(order, user, payment_type, notify = true, save = true)
+    # Method doing too many things
+    if order.items.length > 0 && order.total > 0
+      if payment_type == :credit_card
+        charge_card(order.total)
+      else
+        charge_bank(order.total)
+      end
+      
+      UserMailer.send_email(user) if notify
+      order.save if save
+      true
+    else
+      false
+    end
+  end
+end
+```
+
+## Benefits
+- More maintainable and testable code
+- Clearer responsibilities and dependencies
+- Easier to understand and modify
+- Reduced bugs through better encapsulation
+- Improved code reuse

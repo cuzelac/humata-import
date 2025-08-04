@@ -1,0 +1,87 @@
+---
+description: Enforces the use of Ruby's standard library over external dependencies
+globs: *.rb
+alwaysApply: false
+---
+# Ruby Standard Library Usage Rule
+
+## Description
+This rule enforces the use of Ruby's standard library (stdlib) for common operations, reducing external dependencies and ensuring consistent implementation patterns.
+
+## Rule
+When implementing Ruby functionality:
+
+1. **Prefer Standard Library**
+   - MUST use stdlib modules when available instead of external gems
+   - MUST document when stdlib alternatives are chosen over popular gems
+   - MUST use built-in Ruby classes and modules for basic operations
+
+2. **Common Standard Library Modules to Use**
+   - `FileUtils` for file operations
+   - `JSON` for JSON parsing/generation
+   - `CSV` for CSV file handling
+   - `URI` for URL parsing and manipulation
+   - `Net::HTTP` for HTTP requests
+   - `SecureRandom` for generating random values
+   - `Logger` for logging
+   - `Time` and `Date` for time operations
+   - `StringIO` for string buffering
+   - `Pathname` for path manipulation
+
+3. **Exception Handling**
+   - Use stdlib exception classes when applicable
+   - Create custom exceptions inheriting from `StandardError`
+
+4. **Testing**
+   - Use `Test::Unit` or `Minitest` (built into Ruby)
+   - Prefer stdlib assertions over custom matchers
+
+## Examples
+
+✅ Good:
+```ruby
+require 'json'
+require 'uri'
+require 'net/http'
+require 'logger'
+
+class DataFetcher
+  def initialize
+    @logger = Logger.new($stdout)
+  end
+
+  def fetch_data(url)
+    uri = URI(url)
+    response = Net::HTTP.get_response(uri)
+    JSON.parse(response.body)
+  rescue JSON::ParserError => e
+    @logger.error("Failed to parse JSON: #{e.message}")
+    {}
+  end
+end
+```
+
+❌ Bad:
+```ruby
+# Don't use external gems for basic operations
+require 'httparty'
+require 'awesome_print'
+require 'oj'
+
+class DataFetcher
+  def fetch_data(url)
+    response = HTTParty.get(url)
+    Oj.load(response.body)
+  rescue Oj::ParseError => e
+    ap "Error: #{e.message}"
+    {}
+  end
+end
+```
+
+## Benefits
+- Reduced external dependencies
+- Better security through fewer third-party dependencies
+- Consistent implementation patterns
+- Improved maintainability
+- Better portability across Ruby versions

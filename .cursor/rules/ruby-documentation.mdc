@@ -1,0 +1,132 @@
+---
+description: Establishes standards for documenting Ruby code
+globs: *.rb
+alwaysApply: false
+---
+# Ruby Documentation Rule
+
+## Description
+This rule establishes standards for documenting Ruby code, ensuring clarity and maintainability through comprehensive documentation.
+
+## Rule
+When documenting Ruby code:
+
+1. **File-Level Documentation**
+   - Include a file description at the top
+   - List file dependencies
+   - Document any configuration requirements
+   - Note any side effects or global state modifications
+
+2. **Class and Module Documentation**
+   - Document the purpose and responsibility
+   - List public API methods
+   - Explain class relationships
+   - Document class-level constants
+   - Use YARD documentation format
+
+3. **Method Documentation**
+   - Document parameters and return values
+   - Note any exceptions that may be raised
+   - Provide usage examples for complex methods
+   - Document side effects
+   - Include parameter types
+
+4. **Code Comments**
+   - Comment complex algorithms
+   - Explain business logic
+   - Document temporary solutions or TODOs
+   - Avoid obvious comments
+   - Keep comments up to date
+
+## Examples
+
+✅ Good:
+```ruby
+# frozen_string_literal: true
+
+# Handles user authentication against multiple providers
+# @author Jane Smith
+# @since 1.0.0
+class AuthenticationService
+  # @return [Integer] Number of seconds before token expiration
+  TOKEN_EXPIRY = 3600
+
+  # Authenticates a user with the given credentials
+  #
+  # @param credentials [Hash] The user credentials
+  # @option credentials [String] :username The username
+  # @option credentials [String] :password The password
+  # @option credentials [Symbol] :provider (:local) The auth provider
+  #
+  # @return [User, nil] The authenticated user or nil
+  # @raise [AuthenticationError] If the provider is invalid
+  #
+  # @example
+  #   service.authenticate(
+  #     username: "john",
+  #     password: "secret",
+  #     provider: :google
+  #   )
+  def authenticate(credentials)
+    # Complex authentication logic here...
+  end
+end
+```
+
+❌ Bad:
+```ruby
+class Auth
+  # Authenticates user
+  def auth(creds)
+    # Do stuff
+    if valid
+      user
+    else
+      nil
+    end
+  end
+end
+```
+
+## Benefits
+- Easier onboarding for new developers
+- Better maintainability
+- Improved code review process
+- Self-documenting codebase
+- Better IDE integration through structured docs
+
+## Documentation Format
+Use YARD tags for consistent documentation:
+
+- `@param [Type] name description`
+- `@return [Type] description`
+- `@raise [ExceptionClass] description`
+- `@example description`
+- `@since version`
+- `@deprecated description`
+- `@note additional information`
+- `@see reference`
+- `@author name`
+
+## Implementation
+The documentation should be:
+
+1. **Accurate**
+   - Keep documentation in sync with code
+   - Update docs when changing functionality
+   - Remove outdated documentation
+
+2. **Concise**
+   - Be clear and to the point
+   - Avoid redundant information
+   - Use consistent terminology
+
+3. **Complete**
+   - Document all public APIs
+   - Include all necessary information
+   - Provide context where needed
+
+4. **Accessible**
+   - Use clear language
+   - Provide examples for complex features
+   - Include links to related documentation

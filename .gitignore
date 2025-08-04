@@ -25,3 +25,4 @@ log/
 
 # Byebug command history
 .byebug_history
+google-service-account.json

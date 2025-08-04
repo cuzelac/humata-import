@@ -1,0 +1,88 @@
+---
+description: Enforces consistent Ruby code style and formatting practices
+globs: *.rb
+alwaysApply: false
+---
+# Ruby Code Style and Formatting Rule
+
+## Description
+This rule enforces consistent code style and formatting practices for Ruby files to ensure readability and maintainability.
+
+## Rule
+When writing Ruby code:
+
+1. **Indentation and Spacing**
+   - Use 2 spaces for indentation (NO tabs)
+   - Use spaces around operators and after commas
+   - No trailing whitespace
+   - One empty line between method definitions
+   - No empty line after method start or before method end
+
+2. **Naming Conventions**
+   - Use `snake_case` for methods and variables
+   - Use `CamelCase` for classes and modules
+   - Use `SCREAMING_SNAKE_CASE` for constants
+   - Prefix boolean methods with question mark (e.g., `valid?`)
+   - Prefix destructive methods with bang (e.g., `save!`)
+
+3. **Line Length and Structure**
+   - Maximum line length: 100 characters
+   - Break long method chains with dot at start of new line
+   - Align parameters in multi-line method calls
+
+4. **Code Organization**
+   - One class/module per file
+   - Related methods grouped together
+   - Public methods first, then protected, then private
+   - Class methods before instance methods
+
+## Examples
+
+✅ Good:
+```ruby
+class UserAuthentication
+  TIMEOUT_SECONDS = 3600
+
+  def self.authenticate(credentials)
+    new(credentials).authenticate
+  end
+
+  def initialize(credentials)
+    @credentials = credentials
+  end
+
+  def authenticate
+    return false unless valid?
+    perform_authentication
+  end
+
+  private
+
+  def valid?
+    @credentials.present? && 
+      @credentials[:username].present? && 
+      @credentials[:password].present?
+  end
+end
+```
+
+❌ Bad:
+```ruby
+class user_auth
+def authenticate credentials
+return false if !credentials.present?
+perform_authentication()
+end
+  private
+    def valid
+      @credentials.present? && @credentials[:username].present? && @credentials[:password].present?
+    end
+end
+```
+
+## Benefits
+- Consistent, readable code across the project
+- Easier code review process
+- Reduced cognitive load when reading code
+- Better maintainability
+- Follows Ruby community standards

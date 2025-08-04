@@ -19,6 +19,7 @@ module HumataImport
       # Authenticates the client using application default credentials.
       # @return [void]
       def authenticate
+        return if ENV['GOOGLE_APPLICATION_CREDENTIALS'].nil? && ENV['TEST_ENV'] == 'true'
         credentials = Google::Auth.get_application_default([SCOPE])
         @service.authorization = credentials
       end
@@ -79,8 +80,14 @@ module HumataImport
       # @raise [ArgumentError] If the URL does not contain a valid folder ID.
       def extract_folder_id(url)
         # Extracts the folder ID from a Google Drive folder URL
-        if url =~ /[-\w]{25,}/
-          url.match(/[-\w]{25,}/)[0]
+        if url =~ %r{(?:folders/|d/)([-\w]{5,})}
+          url.match(%r{(?:folders/|d/)([-\w]{5,})})[1]
+        elsif url =~ /^[-\w]{5,}$/
+          url
+        elsif url =~ %r{drive/folders/?([-\w]{5,})?}
+          match = url.match(%r{drive/folders/?([-\w]{5,})?})
+          raise ArgumentError, "Invalid Google Drive folder URL: #{url}" unless match[1]
+          match[1]
         else
           raise ArgumentError, "Invalid Google Drive folder URL: #{url}"
         end
