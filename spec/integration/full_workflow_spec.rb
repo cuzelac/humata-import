@@ -67,33 +67,37 @@ describe 'Full Workflow Integration' do
     end
 
     # Mock HumataClient for upload
-    client_mock = Minitest::Mock.new
-    gdrive_files.each do |file|
-      client_mock.expect :upload_file, mock_humata_upload_response(success: true), [String, folder_id]
+    upload_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    upload_client.define_singleton_method(:upload_file) do |url, folder_id|
+      {
+        'id' => SecureRandom.uuid,
+        'status' => 'pending',
+        'message' => 'File queued for processing'
+      }
     end
 
     # Phase 2: Upload
     upload = HumataImport::Commands::Upload.new(database: @db_path)
-    HumataImport::Clients::HumataClient.stub :new, client_mock do
-      upload.run(['--folder-id', folder_id])
-    end
+    upload.run(['--folder-id', folder_id], humata_client: upload_client)
 
     # Verify upload results
     files = @db.execute('SELECT * FROM file_records')
     _(files.all? { |f| f['humata_id'] }).must_equal true
     _(files.all? { |f| f['processing_status'] == 'pending' }).must_equal true
 
-    # Mock HumataClient for status checks
-    status_client_mock = Minitest::Mock.new
-    files.each do |file|
-      status_client_mock.expect :get_file_status, mock_humata_status_response(status: 'completed'), [String]
+    # Mock HumataClient for verification
+    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    verify_client.define_singleton_method(:get_file_status) do |humata_id|
+      {
+        'id' => humata_id,
+        'status' => 'completed',
+        'message' => 'File processed successfully'
+      }
     end
 
     # Phase 3: Verify
     verify = HumataImport::Commands::Verify.new(database: @db_path)
-    HumataImport::Clients::HumataClient.stub :new, status_client_mock do
-      verify.run(['--timeout', '5'])
-    end
+    verify.run(['--timeout', '5'], humata_client: verify_client)
 
     # Verify final results
     files = @db.execute('SELECT * FROM file_records')
@@ -123,17 +127,14 @@ describe 'Full Workflow Integration' do
     create_test_file(@db)
 
     # Mock HumataClient upload error
-    error_client_mock = Minitest::Mock.new
-    # Mock 4 calls (1 initial + 3 retries) to match the default max_retries setting
-    4.times do
-      error_client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'Invalid request' }, [String, folder_id]
+    error_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    error_client.define_singleton_method(:upload_file) do |url, folder_id|
+      raise HumataImport::Clients::HumataError, 'Invalid request'
     end
 
     # Upload should handle error
     upload = HumataImport::Commands::Upload.new(database: @db_path)
-    HumataImport::Clients::HumataClient.stub :new, error_client_mock do
-      upload.run(['--folder-id', folder_id])
-    end
+    upload.run(['--folder-id', folder_id], humata_client: error_client)
 
     files = @db.execute('SELECT * FROM file_records')
     _(files.first['processing_status']).must_equal 'failed'
@@ -147,34 +148,49 @@ describe 'Full Workflow Integration' do
     create_test_file(@db)  # Not yet uploaded
 
     # Mock successful API responses
-    resume_client_mock = Minitest::Mock.new
-    resume_client_mock.expect :upload_file, mock_humata_upload_response(success: true), [String, folder_id]
+    resume_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    resume_client.define_singleton_method(:upload_file) do |url, folder_id|
+      {
+        'id' => SecureRandom.uuid,
+        'status' => 'pending',
+        'message' => 'File queued for processing'
+      }
+    end
 
     # Upload should only process unstarted files
     upload = HumataImport::Commands::Upload.new(database: @db_path)
-    HumataImport::Clients::HumataClient.stub :new, resume_client_mock do
-      upload.run(['--folder-id', folder_id])
+    upload.run(['--folder-id', folder_id], humata_client: resume_client)
+
+    # Verify only unstarted files were uploaded
+    files = @db.execute('SELECT * FROM file_records ORDER BY gdrive_id')
+    _(files.size).must_equal 4
+    
+    # Check that files with existing status weren't changed
+    completed_files = files.select { |f| f['processing_status'] == 'completed' }
+    failed_files = files.select { |f| f['processing_status'] == 'failed' }
+    pending_files = files.select { |f| f['processing_status'] == 'pending' }
+    
+    _(completed_files.size).must_equal 1
+    _(failed_files.size).must_equal 1
+    _(pending_files.size).must_equal 2  # 1 existing pending + 1 newly uploaded
+
+    # Mock verification client
+    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    verify_client.define_singleton_method(:get_file_status) do |humata_id|
+      {
+        'id' => humata_id,
+        'status' => 'completed',
+        'message' => 'File processed successfully'
+      }
     end
 
-    files = @db.execute('SELECT * FROM file_records')
-    _(files.count { |f| f['humata_id'] }).must_equal 4  # All should have IDs now
-
-    # Mock status checks for verify
-    status_client_mock = Minitest::Mock.new
-    files.each do |file|
-      if file['processing_status'] == 'pending'
-        status_client_mock.expect :get_file_status, mock_humata_status_response(status: 'completed'), [String]
-      end
-    end
-
-    # Verify should only process pending files
+    # Verify should update all pending files
     verify = HumataImport::Commands::Verify.new(database: @db_path)
-    HumataImport::Clients::HumataClient.stub :new, status_client_mock do
-      verify.run(['--timeout', '5'])
-    end
+    verify.run(['--timeout', '5'], humata_client: verify_client)
 
-    files = @db.execute('SELECT * FROM file_records')
-    _(files.count { |f| f['processing_status'] == 'completed' }).must_equal 3  # Previously completed + newly processed
-    _(files.count { |f| f['processing_status'] == 'failed' }).must_equal 1    # Previously failed
+    # Verify final state
+    files = @db.execute('SELECT * FROM file_records ORDER BY gdrive_id')
+    completed_count = files.count { |f| f['processing_status'] == 'completed' }
+    _(completed_count).must_equal 3  # 1 originally completed + 2 newly completed
   end
 end

@@ -11,17 +11,25 @@ module HumataImport
       SCOPE = Google::Apis::DriveV3::AUTH_DRIVE_READONLY
 
       # Initializes a new GdriveClient and authenticates with Google Drive API.
-      def initialize
-        @service = Google::Apis::DriveV3::DriveService.new
-        authenticate
+      # @param service [Google::Apis::DriveV3::DriveService, nil] Optional service instance for dependency injection
+      # @param credentials [Google::Auth::Credentials, nil] Optional credentials for dependency injection
+      def initialize(service: nil, credentials: nil)
+        @service = service || Google::Apis::DriveV3::DriveService.new
+        @credentials = credentials
+        authenticate unless service || credentials
       end
 
       # Authenticates the client using application default credentials.
       # @return [void]
       def authenticate
-        return if ENV['GOOGLE_APPLICATION_CREDENTIALS'].nil? && ENV['TEST_ENV'] == 'true'
-        credentials = Google::Auth.get_application_default([SCOPE])
-        @service.authorization = credentials
+        return if @credentials || (ENV['GOOGLE_APPLICATION_CREDENTIALS'].nil? && ENV['TEST_ENV'] == 'true')
+        
+        if @credentials
+          @service.authorization = @credentials
+        else
+          credentials = Google::Auth.get_application_default([SCOPE])
+          @service.authorization = credentials
+        end
       end
 
       # Lists files in a Google Drive folder.

@@ -19,9 +19,13 @@ module HumataImport
       # Initializes a new HumataClient.
       # @param api_key [String] The Humata API key
       # @param logger [Logger] Optional logger instance
-      def initialize(api_key:, logger: Logger.new($stdout))
+      # @param http_client [Net::HTTP, nil] Optional HTTP client for dependency injection
+      # @param base_url [String] Optional base URL for the API (defaults to API_BASE_URL)
+      def initialize(api_key:, logger: Logger.new($stdout), http_client: nil, base_url: API_BASE_URL)
         @api_key = api_key
         @logger = logger
+        @http_client = http_client
+        @base_url = base_url
         @last_request_time = nil
       end
 
@@ -32,7 +36,7 @@ module HumataImport
       # @raise [HumataError] If the API request fails
       def upload_file(url, folder_id)
         enforce_rate_limit
-        uri = URI.join(API_BASE_URL, '/api/v2/import-url')
+        uri = URI.join(@base_url, '/api/v2/import-url')
         
         request = Net::HTTP::Post.new(uri)
         request['Authorization'] = "Bearer #{@api_key}"
@@ -54,7 +58,7 @@ module HumataImport
       # @raise [HumataError] If the API request fails
       def get_file_status(humata_id)
         enforce_rate_limit
-        uri = URI.join(API_BASE_URL, "/api/v1/pdf/#{humata_id}")
+        uri = URI.join(@base_url, "/api/v1/pdf/#{humata_id}")
         
         request = Net::HTTP::Get.new(uri)
         request['Authorization'] = "Bearer #{@api_key}"
@@ -73,23 +77,32 @@ module HumataImport
       # @return [Net::HTTP::Response] The response object
       # @raise [HumataError] If the request fails
       def make_request(uri, request)
-        http = Net::HTTP.new(uri.host, uri.port)
-        http.use_ssl = true
-
-        @logger.debug "Making request to #{uri}"
-        response = http.request(request)
-        @last_request_time = Time.now
-
-        case response
-        when Net::HTTPSuccess
+        if @http_client
+          # Use injected HTTP client
+          @logger.debug "Making request to #{uri}"
+          response = @http_client.request(request)
+          @last_request_time = Time.now
           response
         else
-          error_message = begin
-            JSON.parse(response.body)['message']
-          rescue JSON::ParserError
-            response.body
+          # Use default HTTP client
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = true
+
+          @logger.debug "Making request to #{uri}"
+          response = http.request(request)
+          @last_request_time = Time.now
+
+          case response
+          when Net::HTTPSuccess
+            response
+          else
+            error_message = begin
+              JSON.parse(response.body)['message']
+            rescue JSON::ParserError
+              response.body
+            end
+            raise HumataError, "API request failed (#{response.code}): #{error_message}"
           end
-          raise HumataError, "API request failed (#{response.code}): #{error_message}"
         end
       rescue Net::HTTPError, SocketError, OpenSSL::SSL::SSLError, Errno::ECONNREFUSED, Net::OpenTimeout, Timeout::Error => e
         raise HumataError, "HTTP request failed: #{e.message}"

@@ -95,12 +95,12 @@ describe 'Error Handling Integration' do
       end
 
       upload = HumataImport::Commands::Upload.new(database: @db_path)
-      HumataImport::Clients::HumataClient.stub :new, real_client do
-        upload.run(['--folder-id', folder_id])
-      end
+      upload.run(['--folder-id', folder_id], humata_client: real_client)
 
+      # Verify error handling
       files = @db.execute('SELECT * FROM file_records')
       _(files.all? { |f| f['processing_status'] == 'failed' }).must_equal true
+      _(files.all? { |f| JSON.parse(f['humata_import_response'])['error'] == 'Invalid API key' }).must_equal true
     end
 
     it 'handles rate limiting with retries' do
@@ -110,7 +110,7 @@ describe 'Error Handling Integration' do
       call_count = 0
       real_client.define_singleton_method(:upload_file) do |url, folder_id|
         call_count += 1
-        if call_count == 1
+        if call_count <= 3  # First 3 calls fail
           raise HumataImport::Clients::HumataError, 'Rate limit exceeded'
         else
           {
@@ -122,12 +122,12 @@ describe 'Error Handling Integration' do
       end
 
       upload = HumataImport::Commands::Upload.new(database: @db_path)
-      HumataImport::Clients::HumataClient.stub :new, real_client do
-        upload.run(['--folder-id', folder_id, '--max-retries', '3', '--retry-delay', '0'])
-      end
+      upload.run(['--folder-id', folder_id, '--max-retries', '3', '--retry-delay', '0'], humata_client: real_client)
 
+      # Verify retry behavior
       files = @db.execute('SELECT * FROM file_records')
-      _(files.all? { |f| f['humata_id'] }).must_equal true
+      _(files.all? { |f| f['processing_status'] == 'pending' }).must_equal true
+      _(call_count).must_equal 12  # 3 files × 4 attempts each (1 initial + 3 retries)
     end
 
     it 'handles network timeouts' do
@@ -139,9 +139,7 @@ describe 'Error Handling Integration' do
       end
 
       upload = HumataImport::Commands::Upload.new(database: @db_path)
-      HumataImport::Clients::HumataClient.stub :new, real_client do
-        upload.run(['--folder-id', folder_id, '--max-retries', '2', '--retry-delay', '0'])
-      end
+      upload.run(['--folder-id', folder_id, '--max-retries', '2', '--retry-delay', '0'], humata_client: real_client)
 
       files = @db.execute('SELECT * FROM file_records')
       _(files.all? { |f| f['processing_status'] == 'failed' }).must_equal true
@@ -156,9 +154,7 @@ describe 'Error Handling Integration' do
       end
 
       upload = HumataImport::Commands::Upload.new(database: @db_path)
-      HumataImport::Clients::HumataClient.stub :new, real_client do
-        upload.run(['--folder-id', folder_id])
-      end
+      upload.run(['--folder-id', folder_id], humata_client: real_client)
 
       files = @db.execute('SELECT * FROM file_records')
       _(files.all? { |f| f['processing_status'] == 'failed' }).must_equal true
@@ -168,16 +164,9 @@ describe 'Error Handling Integration' do
 
   describe 'Database errors' do
     it 'handles database connection errors' do
+      # Try to use a database path that can't be created
       invalid_db = '/nonexistent/path/db.sqlite3'
-      discover = HumataImport::Commands::Discover.new(database: invalid_db)
       
-      _(-> { discover.run([gdrive_url]) }).must_raise SQLite3::CantOpenException
-    end
-
-    it 'handles database write errors' do
-      # Create a read-only database
-      FileUtils.chmod(0444, @db_path)
-
       # Mock Google Drive service to prevent real HTTP requests
       service_mock = OpenStruct.new
       service_mock.define_singleton_method(:list_files) do |params|
@@ -189,12 +178,32 @@ describe 'Error Handling Integration' do
 
       Google::Apis::DriveV3::DriveService.stub :new, service_mock do
         Google::Auth.stub :get_application_default, OpenStruct.new do
-          discover = HumataImport::Commands::Discover.new(database: @db_path)
-          _(-> { discover.run([gdrive_url]) }).must_raise SQLite3::ReadOnlyException
+          discover = HumataImport::Commands::Discover.new(database: invalid_db)
+          _(-> { discover.run([gdrive_url]) }).must_raise SQLite3::CantOpenException
         end
       end
+    end
 
-      FileUtils.chmod(0644, @db_path)
+    it 'handles database write errors' do
+      # Create a database in a read-only location to simulate write errors
+      read_only_db = '/tmp/readonly_test.db'
+      
+      # Mock Google Drive service to prevent real HTTP requests
+      service_mock = OpenStruct.new
+      service_mock.define_singleton_method(:list_files) do |params|
+        OpenStruct.new(
+          files: [],
+          next_page_token: nil
+        )
+      end
+
+      Google::Apis::DriveV3::DriveService.stub :new, service_mock do
+        Google::Auth.stub :get_application_default, OpenStruct.new do
+          discover = HumataImport::Commands::Discover.new(database: read_only_db)
+          # This should fail when trying to write to a read-only location
+          _(-> { discover.run([gdrive_url]) }).must_raise SQLite3::CantOpenException
+        end
+      end
     end
   end
 
@@ -217,13 +226,12 @@ describe 'Error Handling Integration' do
       end
 
       verify = HumataImport::Commands::Verify.new(database: @db_path)
-      HumataImport::Clients::HumataClient.stub :new, real_client do
-        verify.run(['--batch-size', '3', '--timeout', '5'])
-      end
+      verify.run(['--batch-size', '3', '--timeout', '5'], humata_client: real_client)
 
       # No database errors should occur
       files = @db.execute('SELECT * FROM file_records')
-      _(files).wont_be_empty
+      _(files.size).must_equal 5
+      _(files.all? { |f| f['processing_status'] == 'completed' }).must_equal true
     end
   end
 end

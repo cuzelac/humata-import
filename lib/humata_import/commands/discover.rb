@@ -20,9 +20,10 @@ module HumataImport
 
       # Runs the discover command.
       # @param args [Array<String>] Command-line arguments (should include the GDrive URL and options)
+      # @param gdrive_client [HumataImport::Clients::GdriveClient, nil] Optional GDrive client for dependency injection
       # @return [void]
       # @raise [ArgumentError] If the GDrive URL is missing or invalid
-      def run(args)
+      def run(args, gdrive_client: nil)
         options = {
           recursive: true,
           file_types: DEFAULT_FILE_TYPES,
@@ -46,7 +47,9 @@ module HumataImport
         # Ensure DB schema is initialized
         HumataImport::Database.initialize_schema(@options[:database])
 
-        client = HumataImport::Clients::GdriveClient.new
+        # Use injected client or create default one
+        client = gdrive_client || HumataImport::Clients::GdriveClient.new
+        
         logger.debug "Discovering files in Google Drive folder..."
         files = client.list_files(gdrive_url, recursive: options[:recursive])
         logger.debug "Found #{files.size} files before filtering."

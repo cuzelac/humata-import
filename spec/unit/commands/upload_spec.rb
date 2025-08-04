@@ -76,16 +76,13 @@ module HumataImport
         create_test_file(@db, { gdrive_id: 'file1', name: 'test1.pdf', url: 'https://example.com/file1.pdf' })
         create_test_file(@db, { gdrive_id: 'file2', name: 'test2.pdf', url: 'https://example.com/file2.pdf' })
 
-        # Mock HumataClient
+        # Create mock HumataClient
         client_mock = Minitest::Mock.new
         client_mock.expect :upload_file, { 'id' => 'humata-1', 'status' => 'pending' }, [String, @folder_id]
         client_mock.expect :upload_file, { 'id' => 'humata-2', 'status' => 'pending' }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
-        
-        HumataImport::Clients::HumataClient.stub :new, client_mock do
-          upload.run(['--folder-id', @folder_id])
-        end
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
 
         # Verify database updates
         files = @db.execute('SELECT * FROM file_records ORDER BY gdrive_id')
@@ -106,17 +103,14 @@ module HumataImport
         # Create test file
         create_test_file(@db, { gdrive_id: 'file1', name: 'test1.pdf', url: 'https://example.com/file1.pdf' })
 
-        # Mock HumataClient to fail twice then succeed
+        # Create mock HumataClient to fail twice then succeed
         client_mock = Minitest::Mock.new
         client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'Rate limit exceeded' }, [String, @folder_id]
         client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'Rate limit exceeded' }, [String, @folder_id]
         client_mock.expect :upload_file, { 'id' => 'humata-1', 'status' => 'pending' }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
-        
-        HumataImport::Clients::HumataClient.stub :new, client_mock do
-          upload.run(['--folder-id', @folder_id, '--max-retries', '3', '--retry-delay', '0'])
-        end
+        upload.run(['--folder-id', @folder_id, '--max-retries', '3', '--retry-delay', '0'], humata_client: client_mock)
 
         # Verify successful upload
         files = @db.execute('SELECT * FROM file_records')
@@ -133,17 +127,14 @@ module HumataImport
         # Create test file
         create_test_file(@db, { gdrive_id: 'file1', name: 'test1.pdf', url: 'https://example.com/file1.pdf' })
 
-        # Mock HumataClient to always fail
+        # Create mock HumataClient to always fail
         client_mock = Minitest::Mock.new
         4.times do  # 1 initial + 3 retries
           client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'API error' }, [String, @folder_id]
         end
 
         upload = Upload.new(database: @db_path)
-        
-        HumataImport::Clients::HumataClient.stub :new, client_mock do
-          upload.run(['--folder-id', @folder_id, '--max-retries', '3', '--retry-delay', '0'])
-        end
+        upload.run(['--folder-id', @folder_id, '--max-retries', '3', '--retry-delay', '0'], humata_client: client_mock)
 
         # Verify failure is recorded
         files = @db.execute('SELECT * FROM file_records')
@@ -162,15 +153,12 @@ module HumataImport
         create_test_file(@db, { gdrive_id: 'file2', name: 'test2.pdf', url: 'https://example.com/file2.pdf', processing_status: 'failed', humata_id: 'fail1' })
         create_test_file(@db, { gdrive_id: 'file3', name: 'test3.pdf', url: 'https://example.com/file3.pdf' }) # Not processed
 
-        # Mock HumataClient - should only be called for unprocessed file
+        # Create mock HumataClient - should only be called for unprocessed file
         client_mock = Minitest::Mock.new
         client_mock.expect :upload_file, { 'id' => 'humata-3', 'status' => 'pending' }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
-        
-        HumataImport::Clients::HumataClient.stub :new, client_mock do
-          upload.run(['--folder-id', @folder_id])
-        end
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
 
         # Verify only unprocessed file was uploaded
         files = @db.execute('SELECT * FROM file_records ORDER BY gdrive_id')
@@ -191,17 +179,14 @@ module HumataImport
         # Create multiple test files
         create_test_files(@db, 5)
 
-        # Mock HumataClient
+        # Create mock HumataClient
         client_mock = Minitest::Mock.new
         5.times do |i|
           client_mock.expect :upload_file, { 'id' => "humata-#{i}", 'status' => 'pending' }, [String, @folder_id]
         end
 
         upload = Upload.new(database: @db_path)
-        
-        HumataImport::Clients::HumataClient.stub :new, client_mock do
-          upload.run(['--folder-id', @folder_id, '--batch-size', '2'])
-        end
+        upload.run(['--folder-id', @folder_id, '--batch-size', '2'], humata_client: client_mock)
 
         # Verify all files were uploaded
         files = @db.execute('SELECT * FROM file_records')
@@ -244,10 +229,7 @@ module HumataImport
         client_mock.expect :upload_file, ->(*args) { raise StandardError, 'Unexpected error' }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
-        
-        HumataImport::Clients::HumataClient.stub :new, client_mock do
-          upload.run(['--folder-id', @folder_id])
-        end
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
 
         # Verify error is handled gracefully
         files = @db.execute('SELECT * FROM file_records')

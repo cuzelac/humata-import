@@ -19,9 +19,10 @@ module HumataImport
 
       # Runs the upload command.
       # @param args [Array<String>] Command-line arguments
+      # @param humata_client [HumataImport::Clients::HumataClient, nil] Optional Humata client for dependency injection
       # @return [void]
       # @raise [ArgumentError] If required options are missing
-      def run(args)
+      def run(args, humata_client: nil)
         options = {
           batch_size: 10,
           max_retries: 3,
@@ -43,16 +44,19 @@ module HumataImport
           exit 1
         end
 
-        api_key = ENV['HUMATA_API_KEY']
-        unless api_key
-          logger.error "HUMATA_API_KEY environment variable not set"
-          exit 1
+        # Use injected client or create default one
+        client = humata_client
+        unless client
+          api_key = ENV['HUMATA_API_KEY']
+          unless api_key
+            logger.error "HUMATA_API_KEY environment variable not set"
+            exit 1
+          end
+          client = HumataImport::Clients::HumataClient.new(
+            api_key: api_key,
+            logger: logger
+          )
         end
-
-        client = HumataImport::Clients::HumataClient.new(
-          api_key: api_key,
-          logger: logger
-        )
 
         # Get pending files from database
         pending_files = @db.execute(<<-SQL)

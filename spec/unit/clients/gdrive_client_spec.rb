@@ -46,118 +46,134 @@ describe HumataImport::Clients::GdriveClient do
   end
 
   describe '#list_files' do
-    before do
-      @service_mock = OpenStruct.new
-      client.instance_variable_set(:@service, @service_mock)
-      client.instance_variable_set(:@auth_mock, Minitest::Mock.new)
-    end
-
-    it 'lists files in a folder' do
-      mock_files = [
-        { id: 'file1', name: 'test1.pdf', mime_type: 'application/pdf' },
-        { id: 'file2', name: 'test2.doc', mime_type: 'application/msword' }
-      ]
-      
-      @service_mock.define_singleton_method(:list_files) do |params|
+    it 'lists files from a folder' do
+      # Create mock service with injected response
+      service_mock = OpenStruct.new
+      service_mock.define_singleton_method(:list_files) do |params|
         OpenStruct.new(
-          files: mock_files.map do |f|
+          files: [
             OpenStruct.new(
-              id: f[:id],
-              name: f[:name],
-              mime_type: f[:mime_type],
-              web_content_link: "https://drive.google.com/uc?id=#{f[:id]}",
+              id: 'file1',
+              name: 'test.pdf',
+              mime_type: 'application/pdf',
+              web_content_link: 'https://example.com/file1',
               size: 1024
+            ),
+            OpenStruct.new(
+              id: 'file2',
+              name: 'test.docx',
+              mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              web_content_link: 'https://example.com/file2',
+              size: 2048
             )
-          end,
+          ],
           next_page_token: nil
         )
       end
 
+      client = HumataImport::Clients::GdriveClient.new(service: service_mock)
       files = client.list_files(folder_url)
+
       _(files.size).must_equal 2
-      _(files.first[:id]).must_equal 'file1'
-      _(files.first[:name]).must_equal 'test1.pdf'
+      _(files[0][:id]).must_equal 'file1'
+      _(files[0][:name]).must_equal 'test.pdf'
+      _(files[0][:mime_type]).must_equal 'application/pdf'
+      _(files[1][:id]).must_equal 'file2'
+      _(files[1][:name]).must_equal 'test.docx'
     end
 
-    it 'handles API errors gracefully' do
-      @service_mock.define_singleton_method(:list_files) do |params|
-        raise Google::Apis::Error, 'API error'
-      end
-
-      files = client.list_files(folder_url)
-      _(files).must_be_empty
-    end
-
-    it 'recursively lists files in subfolders when recursive is true' do
-      folder_files = [
-        { id: 'file1', name: 'test1.pdf', mime_type: 'application/pdf' },
-        { id: 'subfolder', name: 'subfolder', mime_type: 'application/vnd.google-apps.folder' }
-      ]
-      
-      subfolder_files = [
-        { id: 'file2', name: 'test2.pdf', mime_type: 'application/pdf' }
-      ]
-
+    it 'handles recursive folder crawling' do
+      # Create mock service with nested folder structure
+      service_mock = OpenStruct.new
       call_count = 0
-      @service_mock.define_singleton_method(:list_files) do |params|
+      service_mock.define_singleton_method(:list_files) do |params|
         call_count += 1
         if call_count == 1
+          # Root folder contains a subfolder and a file
           OpenStruct.new(
-            files: folder_files.map do |f|
+            files: [
               OpenStruct.new(
-                id: f[:id],
-                name: f[:name],
-                mime_type: f[:mime_type],
-                web_content_link: "https://drive.google.com/uc?id=#{f[:id]}",
+                id: 'subfolder',
+                name: 'Subfolder',
+                mime_type: 'application/vnd.google-apps.folder'
+              ),
+              OpenStruct.new(
+                id: 'file1',
+                name: 'root.pdf',
+                mime_type: 'application/pdf',
+                web_content_link: 'https://example.com/root.pdf',
                 size: 1024
               )
-            end,
+            ],
             next_page_token: nil
           )
         else
+          # Subfolder contains a file
           OpenStruct.new(
-            files: subfolder_files.map do |f|
+            files: [
               OpenStruct.new(
-                id: f[:id],
-                name: f[:name],
-                mime_type: f[:mime_type],
-                web_content_link: "https://drive.google.com/uc?id=#{f[:id]}",
-                size: 1024
+                id: 'file2',
+                name: 'sub.pdf',
+                mime_type: 'application/pdf',
+                web_content_link: 'https://example.com/sub.pdf',
+                size: 2048
               )
-            end,
+            ],
             next_page_token: nil
           )
         end
       end
 
+      client = HumataImport::Clients::GdriveClient.new(service: service_mock)
       files = client.list_files(folder_url, recursive: true)
-      _(files.size).must_equal 2  # 1 file in root + 1 file in subfolder
+
+      _(files.size).must_equal 2
+      # Check that both files are present, regardless of order
+      file_names = files.map { |f| f[:name] }.sort
+      _(file_names).must_equal ['root.pdf', 'sub.pdf']
     end
 
-    it 'only lists files in the root folder when recursive is false' do
-      folder_files = [
-        { id: 'file1', name: 'test1.pdf', mime_type: 'application/pdf' },
-        { id: 'subfolder', name: 'subfolder', mime_type: 'application/vnd.google-apps.folder' }
-      ]
-
-      @service_mock.define_singleton_method(:list_files) do |params|
+    it 'skips subfolders when recursive is false' do
+      # Create mock service with folder structure
+      service_mock = OpenStruct.new
+      service_mock.define_singleton_method(:list_files) do |params|
         OpenStruct.new(
-          files: folder_files.map do |f|
+          files: [
             OpenStruct.new(
-              id: f[:id],
-              name: f[:name],
-              mime_type: f[:mime_type],
-              web_content_link: "https://drive.google.com/uc?id=#{f[:id]}",
+              id: 'subfolder',
+              name: 'Subfolder',
+              mime_type: 'application/vnd.google-apps.folder'
+            ),
+            OpenStruct.new(
+              id: 'file1',
+              name: 'root.pdf',
+              mime_type: 'application/pdf',
+              web_content_link: 'https://example.com/root.pdf',
               size: 1024
             )
-          end,
+          ],
           next_page_token: nil
         )
       end
 
+      client = HumataImport::Clients::GdriveClient.new(service: service_mock)
       files = client.list_files(folder_url, recursive: false)
-      _(files.size).must_equal 1  # Only the PDF file, not the subfolder
-      _(files.first[:id]).must_equal 'file1'
+
+      _(files.size).must_equal 1
+      _(files[0][:name]).must_equal 'root.pdf'
+    end
+
+    it 'handles API errors gracefully' do
+      # Create mock service that raises an error
+      service_mock = OpenStruct.new
+      service_mock.define_singleton_method(:list_files) do |params|
+        raise Google::Apis::Error, 'API error'
+      end
+
+      client = HumataImport::Clients::GdriveClient.new(service: service_mock)
+      files = client.list_files(folder_url)
+
+      _(files).must_equal []
     end
   end
 end
