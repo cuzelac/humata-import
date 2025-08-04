@@ -1,0 +1,96 @@
+---
+description: Auto-commit changes after Cursor modifications
+globs: "*"
+alwaysApply: true
+---
+## Description
+This rule ensures that all changes automatically performed by Cursor IDE are committed to git with proper conventional commit messages and detailed explanations.
+
+## Rule
+After each change automatically performed by Cursor:
+
+1. **MUST** automatically commit all changed files to git
+2. **MUST** use conventional git commit convention for the commit message title
+3. **MUST** include a detailed explanation of what was changed and why
+4. **MUST** analyze the prompts used to generate the changes to provide context
+5. **MUST** ensure the commit message is descriptive and follows best practices
+
+## Implementation
+The Cursor IDE will enforce this rule by:
+- Automatically detecting when files have been modified by Cursor
+- Staging all changed files using `git add`
+- Generating commit messages that follow conventional commit format
+- Including detailed commit body explaining the changes and rationale
+- Executing the git commit automatically after each modification session
+
+## Conventional Commit Format
+Commit messages must follow this structure:
+```
+<type>[optional scope]: <description>
+
+[optional body explaining what was changed and why]
+
+[optional footer with breaking changes or references]
+```
+
+### Types:
+- `feat`: New feature or functionality
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style/formatting changes
+- `refactor`: Code refactoring without feature changes
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks, build changes, etc.
+
+## Benefits
+- Automatic version control of all Cursor-generated changes
+- Comprehensive change history with detailed explanations
+- Consistent commit message formatting across the project
+- Better traceability of AI-generated code modifications
+- Reduced manual overhead for developers
+
+## Examples
+
+✅ Good commit messages:
+```bash
+feat(auth): add user authentication system
+
+- Implemented JWT-based authentication
+- Added login/logout endpoints
+- Created user session management
+- Changes were generated to fulfill user request for secure authentication
+
+Breaking change: Authentication now required for all API endpoints
+```
+
+```bash
+fix(database): resolve connection timeout issue
+
+- Increased connection pool size from 5 to 20
+- Added retry logic for failed connections
+- Updated error handling for database timeouts
+- Fixed issue identified in user prompt about slow database queries
+```
+
+```bash
+refactor(utils): extract common validation logic
+
+- Created reusable validation functions
+- Reduced code duplication across components
+- Improved maintainability and testability
+- Refactored based on user request to clean up repetitive code
+```
+
+❌ Bad commit messages:
+```bash
+update files
+fix stuff
+changes
+```
+
+## Additional Requirements
+- Commits should be atomic (one logical change per commit)
+- Commit messages should be written in present tense
+- First line should be 50 characters or less
+- Body should wrap at 72 characters
+- Include context from the user's prompt that triggered the changes
