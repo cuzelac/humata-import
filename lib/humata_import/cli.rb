@@ -20,7 +20,10 @@ module HumataImport
       global.order!(argv)
       command = argv.shift
       case command
-      when 'discover', 'upload', 'verify', 'run', 'status'
+      when 'discover'
+        require_relative 'commands/discover'
+        HumataImport::Commands::Discover.new(options).run(argv)
+      when 'upload', 'verify', 'run', 'status'
         # Placeholder: require and dispatch to command class
         puts "[Stub] Would run '#{command}' with options: #{options.inspect} and args: #{argv.inspect}"
       else
