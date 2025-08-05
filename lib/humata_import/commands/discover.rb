@@ -67,14 +67,8 @@ module HumataImport
         
         begin
           Timeout.timeout(options[:timeout]) do
-            files = client.list_files(gdrive_url, recursive: options[:recursive])
+            files = client.list_files(gdrive_url, recursive: options[:recursive], max_files: options[:max_files])
             logger.debug "Found #{files.size} files."
-
-            # Apply max_files limit
-            if options[:max_files]
-              files = files.first(options[:max_files])
-              logger.debug "Limiting to first #{files.size} files due to --max-files."
-            end
 
             discovered = 0
             skipped = 0

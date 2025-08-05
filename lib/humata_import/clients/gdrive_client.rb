@@ -53,15 +53,17 @@ module HumataImport
       # Lists files in a Google Drive folder.
       # @param folder_url [String] The URL of the Google Drive folder.
       # @param recursive [Boolean] Whether to list files recursively in subfolders (default: true).
+      # @param max_files [Integer, nil] Maximum number of files to collect (nil for unlimited).
       # @return [Array<Hash>] Array of file metadata hashes.
-      def list_files(folder_url, recursive: true)
+      def list_files(folder_url, recursive: true, max_files: nil)
         @logger.debug "Extracting folder ID from URL: #{folder_url}"
         folder_id = extract_folder_id(folder_url)
         @logger.debug "Folder ID: #{folder_id}"
         
         @logger.info "Starting file discovery in folder: #{folder_id}"
+        @logger.info "Max files limit: #{max_files || 'unlimited'}"
         files = []
-        crawl_folder(folder_id, files, recursive)
+        crawl_folder(folder_id, files, recursive, max_files)
         @logger.info "Completed file discovery. Found #{files.size} files"
         files
       end
@@ -72,8 +74,9 @@ module HumataImport
       # @param folder_id [String] The ID of the folder to crawl.
       # @param files [Array<Hash>] The array to collect file metadata.
       # @param recursive [Boolean] Whether to crawl subfolders.
+      # @param max_files [Integer, nil] Maximum number of files to collect (nil for unlimited).
       # @return [void]
-      def crawl_folder(folder_id, files, recursive)
+      def crawl_folder(folder_id, files, recursive, max_files = nil)
         @logger.debug "Crawling folder: #{folder_id}"
         page_token = nil
         page_count = 0
@@ -100,10 +103,21 @@ module HumataImport
             response.files.each do |file|
               @logger.debug "Item: #{file.name} (#{file.id}) - Type: #{file.mime_type}"
               
+              # Check if we've reached the max files limit
+              if max_files && files.size >= max_files
+                @logger.info "Reached max files limit (#{max_files}), stopping discovery"
+                return
+              end
+              
               if file.mime_type == 'application/vnd.google-apps.folder'
                 if recursive
                   @logger.debug "Found subfolder: #{file.name} (#{file.id})"
-                  crawl_folder(file.id, files, recursive)
+                  crawl_folder(file.id, files, recursive, max_files)
+                  # Check again after crawling subfolder
+                  if max_files && files.size >= max_files
+                    @logger.info "Reached max files limit (#{max_files}) after crawling subfolder, stopping discovery"
+                    return
+                  end
                 else
                   @logger.debug "Skipping subfolder (non-recursive): #{file.name} (#{file.id})"
                 end

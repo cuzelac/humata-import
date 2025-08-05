@@ -145,6 +145,12 @@ class DiscoverHangTester
             puts "     - #{file[:name]} (#{file[:id]})"
           end
         end
+        
+        # Test max files limit
+        puts "\n🧪 Testing max files limit..."
+        max_files_test = @client.list_files(@gdrive_url, recursive: false, max_files: 5)
+        puts "✅ Max files test completed"
+        puts "   Limited to 5 files, found: #{max_files_test.size} files"
       end
     rescue Timeout::Error
       puts "❌ File listing timed out after #{@timeout} seconds"
