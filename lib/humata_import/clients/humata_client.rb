@@ -14,7 +14,7 @@ module HumataImport
       RATE_LIMIT = 120
 
       # @return [String] Base URL for the Humata API
-      API_BASE_URL = 'https://api.humata.ai'
+      API_BASE_URL = 'https://app.humata.ai'
 
       # Initializes a new HumataClient.
       # @param api_key [String] The Humata API key
