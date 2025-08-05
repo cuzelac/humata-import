@@ -39,10 +39,15 @@ module HumataImport
       end
 
       describe '.convert_google_drive_url' do
-        it 'converts Google Drive URLs to direct download format' do
+        it 'converts Google Drive URLs to direct file view format' do
           original = 'https://drive.google.com/file/d/abc123/view?usp=sharing'
-          expected = 'https://drive.google.com/uc?id=abc123&export=download'
+          expected = 'https://drive.google.com/file/d/abc123/view?usp=drive_link'
           _(UrlConverter.convert_google_drive_url(original)).must_equal expected
+        end
+
+        it 'preserves already correct drive_link format' do
+          url = 'https://drive.google.com/file/d/1P46B9iPFw93kUmsAVJcKBtCgPRVjOk8S/view?usp=drive_link'
+          _(UrlConverter.convert_google_drive_url(url)).must_equal url
         end
 
         it 'leaves non-Google Drive URLs unchanged' do
@@ -63,6 +68,12 @@ module HumataImport
           _(UrlConverter.sanitize_url(original)).must_equal expected
         end
 
+        it 'preserves usp=drive_link parameter' do
+          original = 'https://drive.google.com/file/d/123/view?usp=drive_link&edit=true'
+          expected = 'https://drive.google.com/file/d/123/view?usp=drive_link'
+          _(UrlConverter.sanitize_url(original)).must_equal expected
+        end
+
         it 'removes fragments' do
           original = 'https://example.com/file.pdf#section1'
           expected = 'https://example.com/file.pdf'
@@ -78,7 +89,7 @@ module HumataImport
       describe '.optimize_for_humata' do
         it 'combines sanitization and Google Drive conversion' do
           original = 'https://drive.google.com/file/d/abc123/view?usp=sharing#section1'
-          expected = 'https://drive.google.com/uc?id=abc123&export=download'
+          expected = 'https://drive.google.com/file/d/abc123/view?usp=drive_link'
           _(UrlConverter.optimize_for_humata(original)).must_equal expected
         end
 

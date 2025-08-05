@@ -6,8 +6,8 @@ module HumataImport
   module Utils
     # Utility for converting Google Drive URLs to formats that work better with Humata API
     class UrlConverter
-      # Converts various Google Drive URL formats to direct download URLs
-      # that are less likely to cause 500 errors with the Humata API
+      # Converts various Google Drive URL formats to direct file view URLs
+      # that work reliably with the Humata API
       #
       # @param url [String] The original Google Drive URL
       # @return [String] The converted URL optimized for Humata API
@@ -17,8 +17,8 @@ module HumataImport
         file_id = extract_file_id(url)
         return url unless file_id
         
-        # Convert to direct download format
-        "https://drive.google.com/uc?id=#{file_id}&export=download"
+        # Convert to direct file view format that works with Humata API
+        "https://drive.google.com/file/d/#{file_id}/view?usp=drive_link"
       end
       
       # Checks if a URL is a Google Drive URL
@@ -77,10 +77,12 @@ module HumataImport
         return url unless uri
         
         # Remove problematic query parameters that might cause 500 errors
+        # But preserve usp=drive_link which works with Humata API
         if uri.query
           params = URI.decode_www_form(uri.query)
-          filtered_params = params.reject do |key, _|
-            %w[usp sharing edit view].include?(key.downcase)
+          filtered_params = params.reject do |key, value|
+            %w[sharing edit view].include?(key.downcase) || 
+            (key.downcase == 'usp' && value != 'drive_link')
           end
           
           if filtered_params.empty?

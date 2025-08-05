@@ -103,10 +103,10 @@ API request failed (500): Internal server error
 5. **Server maintenance**: Humata API may be temporarily unavailable
 
 **Solutions**:
-1. **Use direct download URLs**: Convert Google Drive URLs to direct download format
+1. **Use direct file view URLs**: Convert Google Drive URLs to direct file view format
    ```bash
    # Instead of: https://drive.google.com/file/d/ID/view?usp=sharing
-   # Use: https://drive.google.com/uc?id=ID&export=download
+   # Use: https://drive.google.com/file/d/ID/view?usp=drive_link
    ```
 2. **Reduce batch size**: Process fewer files at once
    ```bash
