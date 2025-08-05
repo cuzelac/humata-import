@@ -183,9 +183,11 @@ describe 'Full Workflow Integration' do
     Google::Apis::DriveV3::DriveService.stub :new, service_mock do
       Google::Auth.stub :get_application_default, OpenStruct.new do
         discover = HumataImport::Commands::Discover.new(database: @db_path)
-        discover.run([gdrive_url])
-
-        # Should handle error gracefully
+        
+        # Should raise the error instead of handling gracefully
+        _(-> { discover.run([gdrive_url]) }).must_raise HumataImport::GoogleDriveError
+        
+        # No files should be added due to the error
         files = get_all_files(@db)
         _(files).must_be_empty
       end
