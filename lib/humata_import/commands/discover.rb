@@ -9,9 +9,8 @@ require 'timeout'
 module HumataImport
   module Commands
     # Command for discovering files in a Google Drive folder and recording them in the database.
-    # Handles recursive crawling, file type filtering, and duplicate skipping.
+    # Handles recursive crawling and duplicate skipping.
     class Discover < Base
-      DEFAULT_FILE_TYPES = %w[pdf doc docx txt]
       DEFAULT_TIMEOUT = 300 # 5 minutes timeout
 
       def logger
@@ -28,7 +27,6 @@ module HumataImport
       def run(args, gdrive_client: nil)
         options = {
           recursive: true,
-          file_types: DEFAULT_FILE_TYPES,
           max_files: nil,
           verbose: @options[:verbose],
           timeout: DEFAULT_TIMEOUT
@@ -37,7 +35,6 @@ module HumataImport
           opts.banner = "Usage: humata-import discover <gdrive-url> [options]"
           opts.on('--recursive', 'Crawl subfolders (default: true)') { options[:recursive] = true }
           opts.on('--no-recursive', 'Do not crawl subfolders') { options[:recursive] = false }
-          opts.on('--file-types x,y,z', Array, 'Filter by file types (default: pdf,doc,docx,txt)') { |v| options[:file_types] = v.map(&:strip) }
           opts.on('--max-files N', Integer, 'Limit number of files to discover') { |v| options[:max_files] = v }
           opts.on('--timeout SECONDS', Integer, "Timeout in seconds (default: #{DEFAULT_TIMEOUT})") { |v| options[:timeout] = v }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
@@ -53,7 +50,6 @@ module HumataImport
         logger.info "Starting file discovery process..."
         logger.info "URL: #{gdrive_url}"
         logger.info "Recursive: #{options[:recursive]}"
-        logger.info "File types: #{options[:file_types].join(', ')}"
         logger.info "Timeout: #{options[:timeout]} seconds"
         logger.info "Max files: #{options[:max_files] || 'unlimited'}"
 
@@ -72,24 +68,17 @@ module HumataImport
         begin
           Timeout.timeout(options[:timeout]) do
             files = client.list_files(gdrive_url, recursive: options[:recursive])
-            logger.debug "Found #{files.size} files before filtering."
-
-            # Filter by file type
-            filtered = files.select do |f|
-              ext = File.extname(f[:name]).downcase.delete_prefix('.')
-              options[:file_types].include?(ext)
-            end
-            logger.debug "#{filtered.size} files match type filter: #{options[:file_types].join(', ')}."
+            logger.debug "Found #{files.size} files."
 
             # Apply max_files limit
             if options[:max_files]
-              filtered = filtered.first(options[:max_files])
-              logger.debug "Limiting to first #{filtered.size} files due to --max-files."
+              files = files.first(options[:max_files])
+              logger.debug "Limiting to first #{files.size} files due to --max-files."
             end
 
             discovered = 0
             skipped = 0
-            filtered.each do |file|
+            files.each do |file|
               before = @db.get_first_value("SELECT COUNT(*) FROM file_records WHERE gdrive_id = ?", [file[:id]])
               if before.to_i == 0
                 HumataImport::FileRecord.create(@db,
@@ -117,6 +106,11 @@ module HumataImport
           logger.error "The Google Drive folder may be too large or have too many subfolders"
           logger.error "Try using --no-recursive or --max-files to limit the scope"
           exit 1
+        rescue ArgumentError => e
+          logger.error "Discovery failed: #{e.message}"
+          logger.debug "Full error: #{e.class}: #{e.message}"
+          logger.debug e.backtrace.join("\n") if options[:verbose]
+          raise
         rescue StandardError => e
           logger.error "Discovery failed: #{e.message}"
           logger.debug "Full error: #{e.class}: #{e.message}"

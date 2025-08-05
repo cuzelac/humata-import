@@ -84,12 +84,9 @@ API request failed (400): Invalid file format
 ```
 
 **Solutions**:
-1. Filter file types:
-   ```bash
-   humata-import discover --file-types pdf,doc,docx
-   ```
-2. Check file size limits
-3. Verify file accessibility
+1. Check file size limits
+2. Verify file accessibility
+3. Contact Humata.ai support for unsupported file types
 
 #### Processing Timeouts
 

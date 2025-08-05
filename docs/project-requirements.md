@@ -93,7 +93,7 @@ A system that integrates with Humata.ai's API to automatically import and proces
 ### As a Developer
 1. **Configuration**: "I want to easily configure settings using command-line switches (except for passwords)"
 2. **Monitoring**: "I want comprehensive logs to debug issues"
-3. **Extensibility**: "I want to easily add support for new file types"
+3. **Extensibility**: "I want to easily add support for new features"
 
 ## Architecture Overview
 
@@ -156,7 +156,6 @@ A system that integrates with Humata.ai's API to automatically import and proces
 - `--quiet` / `-q`: Suppress non-essential output
 
 ### Runtime Configuration
-- Supported file types
 - Retry policies
 - Rate limiting parameters
 - Concurrent operation limits

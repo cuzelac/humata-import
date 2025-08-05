@@ -24,7 +24,6 @@ module HumataImport
       def run(args)
         options = {
           recursive: true,
-          file_types: Discover::DEFAULT_FILE_TYPES,
           batch_size: 10,
           max_retries: 3,
           retry_delay: 5,
@@ -38,7 +37,6 @@ module HumataImport
           # Discover options
           opts.on('--recursive', 'Crawl subfolders (default: true)') { options[:recursive] = true }
           opts.on('--no-recursive', 'Do not crawl subfolders') { options[:recursive] = false }
-          opts.on('--file-types x,y,z', Array, 'Filter by file types (default: pdf,doc,docx,txt)') { |v| options[:file_types] = v }
           opts.on('--max-files N', Integer, 'Limit number of files to discover') { |v| options[:max_files] = v }
           
           # Upload options
@@ -70,8 +68,7 @@ module HumataImport
         logger.info "\n=== Phase 1: Discovering Files ==="
         discover_args = [
           gdrive_url,
-          '--recursive',
-          '--file-types', options[:file_types].join(',')
+          '--recursive'
         ]
         discover_args.concat(['--max-files', options[:max_files].to_s]) if options[:max_files]
         discover_args.concat(['--database', @options[:database]]) if @options[:database]

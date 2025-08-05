@@ -160,7 +160,7 @@ end
 ```
 
 ### Deliverable 2: Discover Command Implementation
-Complete the discover command with file filtering and progress reporting
+Complete the discover command with progress reporting
 
 **Files to create:**
 - `lib/humata_import/commands/discover.rb` - Discover command implementation
@@ -172,7 +172,6 @@ class Discover < Base
   def execute(gdrive_url, options)
     # Initialize database if needed
     # Parse folder URL and crawl using GdriveClient
-    # Filter files by type (pdf,doc,docx,txt)
     # Store discovered files in database (skip duplicates)
     # Report progress and final count
   end

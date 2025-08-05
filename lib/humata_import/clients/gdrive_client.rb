@@ -21,9 +21,11 @@ module HumataImport
         @timeout = timeout
         @logger = Logger.new($stdout).tap { |log| log.level = Logger::INFO }
         
-        # Configure timeouts
-        @service.client_options.read_timeout_sec = @timeout
-        @service.client_options.open_timeout_sec = 30
+        # Configure timeouts (only if service has client_options)
+        if @service.respond_to?(:client_options) && @service.client_options
+          @service.client_options.read_timeout_sec = @timeout
+          @service.client_options.open_timeout_sec = 30
+        end
         
         authenticate unless service || credentials
       end
@@ -151,6 +153,8 @@ module HumataImport
           match = url.match(%r{drive/folders/?([-\w]{5,})?})
           raise ArgumentError, "Invalid Google Drive folder URL: #{url}" unless match[1]
           match[1]
+        elsif url =~ %r{drive/?$}
+          raise ArgumentError, "Invalid Google Drive folder URL: #{url}"
         else
           raise ArgumentError, "Invalid Google Drive folder URL: #{url}"
         end

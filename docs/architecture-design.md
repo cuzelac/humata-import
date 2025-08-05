@@ -51,7 +51,6 @@ humata-import status [options]                   # Show current session status
 ```bash
 humata-import discover <gdrive-url> [options]
   --recursive              # Crawl subfolders (default: true)
-  --file-types <types>     # Filter by file types (default: pdf,doc,docx,txt)
   --max-files <n>          # Limit number of files to discover
 ```
 

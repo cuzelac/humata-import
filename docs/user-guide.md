@@ -5,7 +5,6 @@
 The Humata.ai Google Drive Import Tool is a command-line utility that helps you import files from Google Drive folders into your Humata.ai workspace. The tool supports:
 
 - Recursive folder crawling
-- File type filtering
 - Batch processing
 - Progress tracking
 - Status monitoring
@@ -60,7 +59,6 @@ This will:
 
 ```bash
 humata-import discover "https://drive.google.com/drive/folders/your-folder-id" \
-  --file-types pdf,doc,docx,txt \
   --recursive \
   --database ./import_session.db
 ```
@@ -68,7 +66,6 @@ humata-import discover "https://drive.google.com/drive/folders/your-folder-id" \
 Options:
 - `--recursive` (default: true) - Crawl subfolders
 - `--no-recursive` - Only process the root folder
-- `--file-types` - Comma-separated list of file extensions
 - `--max-files N` - Limit the number of files to discover
 
 #### 2. Upload Files
