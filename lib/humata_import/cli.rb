@@ -16,13 +16,7 @@ module HumataImport
         opts.on('-q', '--quiet', 'Suppress non-essential output') { options[:quiet] = true }
         opts.on('-h', '--help', 'Show help') { 
           puts opts
-          puts "\nAvailable commands:"
-          puts "  discover  - Discover files in a Google Drive folder"
-          puts "  upload    - Upload discovered files to Humata.ai"
-          puts "  verify    - Verify processing status of uploaded files"
-          puts "  run       - Run complete workflow (discover + upload + verify)"
-          puts "  status    - Show current import session status"
-          puts "\nUse 'humata-import <command> --help' for command-specific options"
+          print_commands_help
           exit 
         }
       end
@@ -47,15 +41,21 @@ module HumataImport
         HumataImport::Commands::Status.new(options).run(argv)
       else
         puts global
-        puts "\nAvailable commands:"
-        puts "  discover  - Discover files in a Google Drive folder"
-        puts "  upload    - Upload discovered files to Humata.ai"
-        puts "  verify    - Verify processing status of uploaded files"
-        puts "  run       - Run complete workflow (discover + upload + verify)"
-        puts "  status    - Show current import session status"
-        puts "\nUse 'humata-import <command> --help' for command-specific options"
+        print_commands_help
         exit 1
       end
+    end
+
+    private
+
+    def print_commands_help
+      puts "\nAvailable commands:"
+      puts "  discover  - Discover files in a Google Drive folder"
+      puts "  upload    - Upload discovered files to Humata.ai"
+      puts "  verify    - Verify processing status of uploaded files"
+      puts "  run       - Run complete workflow (discover + upload + verify)"
+      puts "  status    - Show current import session status"
+      puts "\nUse 'humata-import <command> --help' for command-specific options"
     end
   end
 end
