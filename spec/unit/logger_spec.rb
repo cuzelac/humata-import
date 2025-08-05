@@ -37,11 +37,21 @@ describe HumataImport::Logger do
     end
 
     it 'detects test mode when Minitest is defined' do
-      # Minitest is already defined in our test environment
-      # We can't easily test this without Minitest being defined, so we'll just verify
-      # that the method returns a boolean value
-      result = logger.test_mode?
-      assert result.is_a?(TrueClass) || result.is_a?(FalseClass)
+      # Store original override to ensure it doesn't interfere
+      original_override = logger.test_mode_override
+      logger.test_mode_override = nil
+      
+      # Check if Minitest is actually defined in this environment
+      if defined?(Minitest)
+        # If Minitest is defined, test_mode? should return true
+        _(logger.test_mode?).must_equal true
+      else
+        # If Minitest is not defined, test_mode? should return false
+        _(logger.test_mode?).must_equal false
+      end
+      
+      # Restore original override
+      logger.test_mode_override = original_override
     end
 
     it 'uses override when set' do

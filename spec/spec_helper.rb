@@ -115,14 +115,6 @@ module TestHelpers
   # @param files [Array<Hash>] The files to return
   # @param error [Exception, nil] Optional error to raise
   def stub_gdrive_list_files(folder_id:, files: [], error: nil)
-    params = {
-      q: "'#{folder_id}' in parents",
-      fields: 'nextPageToken, files(id, name, mimeType, webContentLink, size)',
-      page_token: nil,
-      supports_all_drives: true,
-      include_items_from_all_drives: true
-    }
-
     if error
       -> { raise error }
     else

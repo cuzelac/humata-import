@@ -36,11 +36,11 @@ module HumataImport
     def test_mode?
       return @test_mode_override unless @test_mode_override.nil?
       
-      ENV['TEST_ENV'] == 'true' || 
-      ENV['RACK_ENV'] == 'test' || 
-      ENV['RAILS_ENV'] == 'test' ||
-      defined?(Minitest) ||
-      defined?(RSpec)
+      !!(ENV['TEST_ENV'] == 'true' || 
+         ENV['RACK_ENV'] == 'test' || 
+         ENV['RAILS_ENV'] == 'test' ||
+         defined?(Minitest) ||
+         defined?(RSpec))
     end
 
     # Sets the log level.
