@@ -130,8 +130,11 @@ module HumataImport
                 
                 response = client.upload_file(optimized_url, options[:folder_id])
                 
+                # Extract Humata ID from nested response structure
+                humata_id = response.dig('data', 'pdf', 'id') || response['id']
+                
                 # Store response and update status
-                @db.execute(<<-SQL, [response['id'], 'pending', 'completed', response.to_json, file_data['gdrive_id']])
+                @db.execute(<<-SQL, [humata_id, 'pending', 'completed', response.to_json, file_data['gdrive_id']])
                   UPDATE file_records 
                   SET humata_id = ?,
                       processing_status = ?,
@@ -142,9 +145,9 @@ module HumataImport
 
                 uploaded += 1
                 if is_retry
-                  logger.info "Retry successful: #{file_data['name']} (Humata ID: #{response['id']})"
+                  logger.info "Retry successful: #{file_data['name']} (Humata ID: #{humata_id})"
                 else
-                  logger.debug "Success: #{file_data['name']} (Humata ID: #{response['id']})"
+                  logger.debug "Success: #{file_data['name']} (Humata ID: #{humata_id})"
                 end
               rescue HumataImport::Clients::HumataError => e
                 retries += 1

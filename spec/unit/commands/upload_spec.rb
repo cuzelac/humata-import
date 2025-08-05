@@ -78,8 +78,8 @@ module HumataImport
 
         # Create mock HumataClient
         client_mock = Minitest::Mock.new
-        client_mock.expect :upload_file, { 'id' => 'humata-1', 'status' => 'pending' }, [String, @folder_id]
-        client_mock.expect :upload_file, { 'id' => 'humata-2', 'status' => 'pending' }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-2' } } }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
         upload.run(['--folder-id', @folder_id], humata_client: client_mock)
@@ -105,9 +105,9 @@ module HumataImport
 
         # Create mock HumataClient to fail twice then succeed
         client_mock = Minitest::Mock.new
-        client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'Rate limit exceeded' }, [String, @folder_id]
-        client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'Rate limit exceeded' }, [String, @folder_id]
-        client_mock.expect :upload_file, { 'id' => 'humata-1', 'status' => 'pending' }, [String, @folder_id]
+        client_mock.expect(:upload_file, [String, @folder_id]) { raise HumataImport::Clients::HumataError, 'Rate limit exceeded' }
+        client_mock.expect(:upload_file, [String, @folder_id]) { raise HumataImport::Clients::HumataError, 'Rate limit exceeded' }
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
         upload.run(['--folder-id', @folder_id, '--max-retries', '3', '--retry-delay', '0'], humata_client: client_mock)
@@ -130,7 +130,7 @@ module HumataImport
         # Create mock HumataClient to always fail
         client_mock = Minitest::Mock.new
         4.times do  # 1 initial + 3 retries
-          client_mock.expect :upload_file, ->(*args) { raise HumataImport::Clients::HumataError, 'API error' }, [String, @folder_id]
+          client_mock.expect(:upload_file, [String, @folder_id]) { raise HumataImport::Clients::HumataError, 'API error' }
         end
 
         upload = Upload.new(database: @db_path)
@@ -155,7 +155,7 @@ module HumataImport
 
         # Create mock HumataClient - should only be called for unprocessed file
         client_mock = Minitest::Mock.new
-        client_mock.expect :upload_file, { 'id' => 'humata-3', 'status' => 'pending' }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-3' } } }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
         upload.run(['--folder-id', @folder_id], humata_client: client_mock)
@@ -182,7 +182,7 @@ module HumataImport
         # Create mock HumataClient
         client_mock = Minitest::Mock.new
         5.times do |i|
-          client_mock.expect :upload_file, { 'id' => "humata-#{i}", 'status' => 'pending' }, [String, @folder_id]
+          client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => "humata-#{i}" } } }, [String, @folder_id]
         end
 
         upload = Upload.new(database: @db_path)
@@ -251,7 +251,7 @@ module HumataImport
 
         # Create mock HumataClient that succeeds on retry
         client_mock = Minitest::Mock.new
-        client_mock.expect :upload_file, { 'id' => 'humata-retry-success', 'status' => 'pending' }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-retry-success' } } }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
         upload.run(['--folder-id', @folder_id], humata_client: client_mock)
@@ -302,8 +302,8 @@ module HumataImport
 
         # Create mock HumataClient
         client_mock = Minitest::Mock.new
-        client_mock.expect :upload_file, { 'id' => 'humata-new', 'status' => 'pending' }, [String, @folder_id]
-        client_mock.expect :upload_file, { 'id' => 'humata-retry', 'status' => 'pending' }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-new' } } }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-retry' } } }, [String, @folder_id]
 
         upload = Upload.new(database: @db_path)
         upload.run(['--folder-id', @folder_id], humata_client: client_mock)

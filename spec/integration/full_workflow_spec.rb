@@ -70,9 +70,11 @@ describe 'Full Workflow Integration' do
     upload_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
     upload_client.define_singleton_method(:upload_file) do |url, folder_id|
       {
-        'id' => SecureRandom.uuid,
-        'status' => 'pending',
-        'message' => 'File queued for processing'
+        'data' => {
+          'pdf' => {
+            'id' => SecureRandom.uuid
+          }
+        }
       }
     end
 
@@ -151,9 +153,11 @@ describe 'Full Workflow Integration' do
     resume_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
     resume_client.define_singleton_method(:upload_file) do |url, folder_id|
       {
-        'id' => SecureRandom.uuid,
-        'status' => 'pending',
-        'message' => 'File queued for processing'
+        'data' => {
+          'pdf' => {
+            'id' => SecureRandom.uuid
+          }
+        }
       }
     end
 
