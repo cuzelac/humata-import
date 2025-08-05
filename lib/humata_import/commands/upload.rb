@@ -30,7 +30,7 @@ module HumataImport
         parser = OptionParser.new do |opts|
           opts.banner = "Usage: humata-import upload --folder-id FOLDER_ID [options]"
           opts.on('--folder-id ID', String, 'Humata folder ID (required)') { |v| options[:folder_id] = v }
-          opts.on('--id ID', String, 'Upload only the file with this specific ID') { |v| options[:file_id] = v }
+          opts.on('--id ID', String, 'Upload only the file with this specific gdrive_id') { |v| options[:file_id] = v }
           opts.on('--batch-size N', Integer, 'Number of files to process in parallel (default: 10)') { |v| options[:batch_size] = v }
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Seconds to wait between retries (default: 5)') { |v| options[:retry_delay] = v }
@@ -66,12 +66,12 @@ module HumataImport
 
         # Get pending files from database (including failed uploads to retry)
         if options[:file_id]
-          # Upload specific file by ID
+          # Upload specific file by gdrive_id
           sql = "SELECT * FROM file_records WHERE gdrive_id = ?"
           pending_files = @db.execute(sql, [options[:file_id]])
           
           if pending_files.empty?
-            logger.error "No file found with ID: #{options[:file_id]}"
+            logger.error "No file found with gdrive_id: #{options[:file_id]}"
             exit 1
           end
           

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'logger'
+require 'singleton'
 
 module HumataImport
   # Singleton logger class that provides centralized logging functionality.
