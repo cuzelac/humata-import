@@ -14,7 +14,17 @@ module HumataImport
         opts.on('--database PATH', 'SQLite database file path') { |v| options[:database] = v }
         opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
         opts.on('-q', '--quiet', 'Suppress non-essential output') { options[:quiet] = true }
-        opts.on('-h', '--help', 'Show help') { puts opts; exit }
+        opts.on('-h', '--help', 'Show help') { 
+          puts opts
+          puts "\nAvailable commands:"
+          puts "  discover  - Discover files in a Google Drive folder"
+          puts "  upload    - Upload discovered files to Humata.ai"
+          puts "  verify    - Verify processing status of uploaded files"
+          puts "  run       - Run complete workflow (discover + upload + verify)"
+          puts "  status    - Show current import session status"
+          puts "\nUse 'humata-import <command> --help' for command-specific options"
+          exit 
+        }
       end
       # Parse global options up to the first non-option (the command)
       global.order!(argv)
