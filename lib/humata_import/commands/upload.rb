@@ -4,6 +4,7 @@ require 'optparse'
 require_relative 'base'
 require_relative '../clients/humata_client'
 require_relative '../models/file_record'
+require_relative '../utils/url_converter'
 require 'logger'
 
 module HumataImport
@@ -121,7 +122,12 @@ module HumataImport
               
               retries = 0
               begin
-                response = client.upload_file(file_data['url'], options[:folder_id])
+                # Optimize URL to reduce 500 errors
+                optimized_url = HumataImport::Utils::UrlConverter.optimize_for_humata(file_data['url'])
+                logger.debug "Original URL: #{file_data['url']}"
+                logger.debug "Optimized URL: #{optimized_url}" if optimized_url != file_data['url']
+                
+                response = client.upload_file(optimized_url, options[:folder_id])
                 
                 # Store response and update status
                 @db.execute(<<-SQL, [response['id'], 'pending', response.to_json, file_data['gdrive_id']])

@@ -88,6 +88,34 @@ API request failed (400): Invalid file format
 2. Verify file accessibility
 3. Contact Humata.ai support for unsupported file types
 
+#### Server Errors (500)
+
+**Issue**: Internal server error
+```
+API request failed (500): Internal server error
+```
+
+**Common Causes**:
+1. **Invalid Google Drive URLs**: Some Google Drive URL formats may cause server errors
+2. **Large file URLs**: Very long URLs or URLs with special characters
+3. **Invalid folder IDs**: Non-existent or malformed folder IDs
+4. **Rate limiting**: Too many requests in a short time period
+5. **Server maintenance**: Humata API may be temporarily unavailable
+
+**Solutions**:
+1. **Use direct download URLs**: Convert Google Drive URLs to direct download format
+   ```bash
+   # Instead of: https://drive.google.com/file/d/ID/view?usp=sharing
+   # Use: https://drive.google.com/uc?id=ID&export=download
+   ```
+2. **Reduce batch size**: Process fewer files at once
+   ```bash
+   humata-import upload --batch-size 3 --retry-delay 10
+   ```
+3. **Verify folder ID**: Ensure the Humata folder ID exists and is correct
+4. **Wait and retry**: Server errors are often temporary
+5. **Contact support**: If 500 errors persist, contact Humata.ai support
+
 #### Processing Timeouts
 
 **Issue**: Processing takes too long
