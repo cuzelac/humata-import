@@ -13,7 +13,13 @@ module HumataImport
     class Verify < Base
       def logger
         @logger ||= Logger.new($stdout).tap do |log|
-          log.level = @options[:verbose] ? Logger::DEBUG : Logger::INFO
+          if @options[:quiet]
+            log.level = Logger::ERROR
+          elsif @options[:verbose]
+            log.level = Logger::DEBUG
+          else
+            log.level = Logger::INFO
+          end
         end
       end
 
@@ -26,7 +32,8 @@ module HumataImport
           poll_interval: 10,  # seconds
           timeout: 1800,      # 30 minutes
           batch_size: 10,
-          verbose: @options[:verbose]  # Start with global verbose setting
+          verbose: @options[:verbose],  # Start with global verbose setting
+          quiet: @options[:quiet]
         }
 
         parser = OptionParser.new do |opts|
@@ -35,12 +42,14 @@ module HumataImport
           opts.on('--timeout N', Integer, 'Total timeout in seconds (default: 1800)') { |v| options[:timeout] = v }
           opts.on('--batch-size N', Integer, 'Number of files to check in parallel (default: 10)') { |v| options[:batch_size] = v }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
+          opts.on('-q', '--quiet', 'Suppress non-essential output') { options[:quiet] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
 
         # Update logger level based on verbose setting
         @options[:verbose] = options[:verbose]
+        @options[:quiet] = options[:quiet]
 
         # Use injected client or create default one
         client = humata_client

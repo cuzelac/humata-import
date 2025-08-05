@@ -15,7 +15,13 @@ module HumataImport
 
       def logger
         @logger ||= Logger.new($stdout).tap do |log|
-          log.level = @options[:verbose] ? Logger::DEBUG : Logger::INFO
+          if @options[:quiet]
+            log.level = Logger::ERROR
+          elsif @options[:verbose]
+            log.level = Logger::DEBUG
+          else
+            log.level = Logger::INFO
+          end
         end
       end
 
@@ -29,6 +35,7 @@ module HumataImport
           recursive: true,
           max_files: nil,
           verbose: @options[:verbose],
+          quiet: @options[:quiet],
           timeout: DEFAULT_TIMEOUT
         }
         parser = OptionParser.new do |opts|
@@ -38,6 +45,7 @@ module HumataImport
           opts.on('--max-files N', Integer, 'Limit number of files to discover') { |v| options[:max_files] = v }
           opts.on('--timeout SECONDS', Integer, "Timeout in seconds (default: #{DEFAULT_TIMEOUT})") { |v| options[:timeout] = v }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
+          opts.on('-q', '--quiet', 'Suppress non-essential output') { options[:quiet] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
@@ -46,6 +54,10 @@ module HumataImport
           puts parser
           exit 1
         end
+
+        # Update logger level based on options
+        @options[:verbose] = options[:verbose]
+        @options[:quiet] = options[:quiet]
 
         logger.info "Starting file discovery process..."
         logger.info "URL: #{gdrive_url}"
