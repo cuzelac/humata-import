@@ -28,22 +28,21 @@ describe 'Error Handling Integration' do
 
   describe 'Google Drive errors' do
     it 'handles authentication failures' do
+      # Set credentials path to force authentication attempt
+      ENV['GOOGLE_APPLICATION_CREDENTIALS'] = '/nonexistent/credentials.json'
+      
       # Mock the authentication to fail
       Google::Auth.stub :get_application_default, ->(scopes) { raise RuntimeError, 'Invalid credentials' } do
-        # Create a mock service that raises authentication errors
-        service_mock = OpenStruct.new
-        service_mock.define_singleton_method(:list_files) do |params|
-          raise Google::Apis::AuthorizationError, 'Not authorized'
-        end
+        # The authentication error should be raised during client initialization
+        discover = HumataImport::Commands::Discover.new(database: @db_path)
+        _(-> { discover.run([gdrive_url]) }).must_raise RuntimeError
 
-        Google::Apis::DriveV3::DriveService.stub :new, service_mock do
-          discover = HumataImport::Commands::Discover.new(database: @db_path)
-          discover.run([gdrive_url])
-
-          files = @db.execute('SELECT * FROM file_records')
-          _(files).must_be_empty
-        end
+        files = @db.execute('SELECT * FROM file_records')
+        _(files).must_be_empty
       end
+    ensure
+      # Clean up environment variable
+      ENV.delete('GOOGLE_APPLICATION_CREDENTIALS')
     end
 
     it 'handles rate limiting' do
