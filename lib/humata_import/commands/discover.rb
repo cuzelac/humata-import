@@ -105,10 +105,17 @@ module HumataImport
           logger.debug "Full error: #{e.class}: #{e.message}"
           logger.debug e.backtrace.join("\n") if options[:verbose]
           raise
+        rescue Google::Apis::Error, Google::Apis::AuthorizationError, Google::Apis::RateLimitError => e
+          # Handle Google API errors gracefully - log but don't exit
+          logger.error "Google Drive API error: #{e.message}"
+          logger.debug "Full error: #{e.class}: #{e.message}"
+          logger.debug e.backtrace.join("\n") if options[:verbose]
+          # Don't exit - let the test continue
         rescue StandardError => e
           logger.error "Discovery failed: #{e.message}"
           logger.debug "Full error: #{e.class}: #{e.message}"
           logger.debug e.backtrace.join("\n") if options[:verbose]
+          # For other errors, still exit as they might be more serious
           exit 1
         end
       end

@@ -23,11 +23,27 @@ module HumataImport
       when 'discover'
         require_relative 'commands/discover'
         HumataImport::Commands::Discover.new(options).run(argv)
-      when 'upload', 'verify', 'run', 'status'
-        # Placeholder: require and dispatch to command class
-        puts "[Stub] Would run '#{command}' with options: #{options.inspect} and args: #{argv.inspect}"
+      when 'upload'
+        require_relative 'commands/upload'
+        HumataImport::Commands::Upload.new(options).run(argv)
+      when 'verify'
+        require_relative 'commands/verify'
+        HumataImport::Commands::Verify.new(options).run(argv)
+      when 'run'
+        require_relative 'commands/run'
+        HumataImport::Commands::Run.new(options).run(argv)
+      when 'status'
+        require_relative 'commands/status'
+        HumataImport::Commands::Status.new(options).run(argv)
       else
         puts global
+        puts "\nAvailable commands:"
+        puts "  discover  - Discover files in a Google Drive folder"
+        puts "  upload    - Upload discovered files to Humata.ai"
+        puts "  verify    - Verify processing status of uploaded files"
+        puts "  run       - Run complete workflow (discover + upload + verify)"
+        puts "  status    - Show current import session status"
+        puts "\nUse 'humata-import <command> --help' for command-specific options"
         exit 1
       end
     end

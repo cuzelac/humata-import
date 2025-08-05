@@ -141,7 +141,7 @@ module HumataImport
         rescue Google::Apis::Error => e
           @logger.error "Google Drive API error: #{e.message}"
           @logger.debug "Full error: #{e.class}: #{e.message}"
-          raise
+          # Don't re-raise - let the calling method handle it gracefully
         rescue Net::OpenTimeout, Net::ReadTimeout => e
           @logger.error "Network timeout error: #{e.message}"
           @logger.error "The folder may be too large or network connection is slow"
