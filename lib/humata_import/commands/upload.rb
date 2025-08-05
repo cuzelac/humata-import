@@ -35,6 +35,7 @@ module HumataImport
         parser = OptionParser.new do |opts|
           opts.banner = "Usage: humata-import upload --folder-id FOLDER_ID [options]"
           opts.on('--folder-id ID', String, 'Humata folder ID (required)') { |v| options[:folder_id] = v }
+          opts.on('--id ID', String, 'Upload only the file with this specific ID') { |v| options[:file_id] = v }
           opts.on('--batch-size N', Integer, 'Number of files to process in parallel (default: 10)') { |v| options[:batch_size] = v }
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Seconds to wait between retries (default: 5)') { |v| options[:retry_delay] = v }
@@ -67,20 +68,40 @@ module HumataImport
         end
 
         # Get pending files from database (including failed uploads to retry)
-        sql = if options[:skip_retries]
-          "SELECT * FROM file_records WHERE humata_id IS NULL AND upload_status = 'pending' AND processing_status IS NULL"
+        if options[:file_id]
+          # Upload specific file by ID
+          sql = "SELECT * FROM file_records WHERE gdrive_id = ?"
+          pending_files = @db.execute(sql, [options[:file_id]])
+          
+          if pending_files.empty?
+            logger.error "No file found with ID: #{options[:file_id]}"
+            exit 1
+          end
+          
+          # Convert the first result to hash for logging
+          columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+          first_file = columns.zip(pending_files.first).to_h
+          logger.info "Found file to upload: #{first_file['name']} (#{options[:file_id]})"
         else
-          "SELECT * FROM file_records WHERE humata_id IS NULL AND (upload_status = 'pending' OR processing_status = 'failed')"
-        end
-        pending_files = @db.execute(sql)
+          # Get all pending files
+          sql = if options[:skip_retries]
+            "SELECT * FROM file_records WHERE humata_id IS NULL AND upload_status = 'pending' AND processing_status IS NULL"
+          else
+            "SELECT * FROM file_records WHERE humata_id IS NULL AND (upload_status = 'pending' OR processing_status = 'failed')"
+          end
+          pending_files = @db.execute(sql)
 
-        if pending_files.empty?
-          logger.info "No pending files found for upload."
-          return
+          if pending_files.empty?
+            logger.info "No pending files found for upload."
+            return
+          end
         end
 
         # Count retries vs new uploads
-        if options[:skip_retries]
+        if options[:file_id]
+          # Single file upload - no need for retry counting
+          logger.info "Uploading single file by ID."
+        elsif options[:skip_retries]
           logger.info "Found #{pending_files.size} new files pending upload (retries skipped)."
         else
           retry_count = pending_files.count { |file| file.is_a?(Hash) ? file['processing_status'] == 'failed' : file[8] == 'failed' }
@@ -94,8 +115,11 @@ module HumataImport
         uploaded = 0
         failed = 0
 
+        # For single file upload, set batch size to 1 for simpler processing
+        batch_size = options[:file_id] ? 1 : options[:batch_size]
+
         # Process files in batches
-        pending_files.each_slice(options[:batch_size]) do |batch|
+        pending_files.each_slice(batch_size) do |batch|
           batch.each do |file|
             begin
               # Convert array result to hash using column names
