@@ -63,6 +63,7 @@ module HumataImport
         
         # Mock the logger to capture output
         logger_mock = Minitest::Mock.new
+        logger_mock.expect :configure, nil, [Hash]
         logger_mock.expect :info, nil, ["No pending files found for upload."]
         upload.stub :logger, logger_mock do
           upload.run(['--folder-id', @folder_id])
@@ -228,6 +229,7 @@ module HumataImport
         
         # Mock logger to capture error
         logger_mock = Minitest::Mock.new
+        logger_mock.expect :configure, nil, [Hash]
         logger_mock.expect :error, nil, ["HUMATA_API_KEY environment variable not set"]
         upload.stub :logger, logger_mock do
                   _(-> { upload.run(['--folder-id', @folder_id]) }).must_raise(SystemExit)
@@ -412,6 +414,7 @@ module HumataImport
         
         # Mock logger to capture error message
         logger_mock = Minitest::Mock.new
+        logger_mock.expect :configure, nil, [Hash]
         logger_mock.expect :error, nil, ["No file found with ID: nonexistent-file"]
         upload.stub :logger, logger_mock do
           _(-> { upload.run(['--folder-id', @folder_id, '--id', 'nonexistent-file'], humata_client: client_mock) }).must_raise(SystemExit)

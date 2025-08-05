@@ -11,18 +11,6 @@ module HumataImport
     # Command for verifying the processing status of uploaded files.
     # Handles status polling, timeout handling, and status updates.
     class Verify < Base
-      def logger
-        @logger ||= Logger.new($stdout).tap do |log|
-          if @options[:quiet]
-            log.level = Logger::ERROR
-          elsif @options[:verbose]
-            log.level = Logger::DEBUG
-          else
-            log.level = Logger::INFO
-          end
-        end
-      end
-
       # Runs the verify command.
       # @param args [Array<String>] Command-line arguments
       # @param humata_client [HumataImport::Clients::HumataClient, nil] Optional Humata client for dependency injection
@@ -50,6 +38,7 @@ module HumataImport
         # Update logger level based on verbose setting
         @options[:verbose] = options[:verbose]
         @options[:quiet] = options[:quiet]
+        logger.configure(@options)
 
         # Use injected client or create default one
         client = humata_client
@@ -60,8 +49,7 @@ module HumataImport
             exit 1
           end
           client = HumataImport::Clients::HumataClient.new(
-            api_key: api_key,
-            logger: logger
+            api_key: api_key
           )
         end
 

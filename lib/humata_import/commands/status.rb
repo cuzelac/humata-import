@@ -11,18 +11,6 @@ module HumataImport
     # Command for displaying the current status of the import session.
     # Provides progress summary and detailed reporting options.
     class Status < Base
-      def logger
-        @logger ||= Logger.new($stdout).tap do |log|
-          if @options[:quiet]
-            log.level = Logger::ERROR
-          elsif @options[:verbose]
-            log.level = Logger::DEBUG
-          else
-            log.level = Logger::INFO
-          end
-        end
-      end
-
       # Runs the status command.
       # @param args [Array<String>] Command-line arguments
       # @return [void]
@@ -50,6 +38,7 @@ module HumataImport
         # Update logger level based on verbose setting
         @options[:verbose] = options[:verbose]
         @options[:quiet] = options[:quiet]
+        logger.configure(@options)
 
         # Get overall statistics
         stats = @db.execute(<<-SQL)

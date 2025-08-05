@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'singleton'
+require_relative 'humata_import/logger'
 require_relative 'humata_import/clients/gdrive_client'
 require_relative 'humata_import/clients/humata_client'
 require_relative 'humata_import/database'

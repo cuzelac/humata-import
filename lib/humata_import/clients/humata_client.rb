@@ -3,7 +3,7 @@
 require 'net/http'
 require 'json'
 require 'uri'
-require 'logger'
+require_relative '../logger'
 
 module HumataImport
   module Clients
@@ -18,12 +18,11 @@ module HumataImport
 
       # Initializes a new HumataClient.
       # @param api_key [String] The Humata API key
-      # @param logger [Logger] Optional logger instance
       # @param http_client [Net::HTTP, nil] Optional HTTP client for dependency injection
       # @param base_url [String] Optional base URL for the API (defaults to API_BASE_URL)
-      def initialize(api_key:, logger: Logger.new($stdout), http_client: nil, base_url: API_BASE_URL)
+      def initialize(api_key:, http_client: nil, base_url: API_BASE_URL)
         @api_key = api_key
-        @logger = logger
+        @logger = HumataImport::Logger.instance
         @http_client = http_client
         @base_url = base_url
         @last_request_time = nil

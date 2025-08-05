@@ -13,18 +13,6 @@ module HumataImport
     class Discover < Base
       DEFAULT_TIMEOUT = 300 # 5 minutes timeout
 
-      def logger
-        @logger ||= Logger.new($stdout).tap do |log|
-          if @options[:quiet]
-            log.level = Logger::ERROR
-          elsif @options[:verbose]
-            log.level = Logger::DEBUG
-          else
-            log.level = Logger::INFO
-          end
-        end
-      end
-
       # Runs the discover command.
       # @param args [Array<String>] Command-line arguments (should include the GDrive URL and options)
       # @param gdrive_client [HumataImport::Clients::GdriveClient, nil] Optional GDrive client for dependency injection
@@ -58,6 +46,7 @@ module HumataImport
         # Update logger level based on options
         @options[:verbose] = options[:verbose]
         @options[:quiet] = options[:quiet]
+        logger.configure(@options)
 
         logger.info "Starting file discovery process..."
         logger.info "URL: #{gdrive_url}"

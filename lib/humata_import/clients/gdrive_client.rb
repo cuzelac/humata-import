@@ -1,7 +1,7 @@
 # lib/humata_import/clients/gdrive_client.rb
 require 'google/apis/drive_v3'
 require 'googleauth'
-require 'logger'
+require_relative '../logger'
 
 module HumataImport
   module Clients
@@ -19,7 +19,7 @@ module HumataImport
         @service = service || Google::Apis::DriveV3::DriveService.new
         @credentials = credentials
         @timeout = timeout
-        @logger = Logger.new($stdout).tap { |log| log.level = Logger::INFO }
+        @logger = HumataImport::Logger.instance
         
         # Configure timeouts (only if service has client_options)
         if @service.respond_to?(:client_options) && @service.client_options

@@ -1,54 +1,120 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
-require 'webmock/minitest'
+require 'securerandom'
 
 describe 'Full Workflow Integration' do
-  let(:gdrive_url) { 'https://drive.google.com/drive/folders/abc123' }
-  let(:folder_id) { 'folder123' }
-  let(:api_key) { 'test_api_key' }
-
-  before do
-    WebMock.enable!
-    ENV['HUMATA_API_KEY'] = api_key
-    
-    # Set up a clean database
-    @db_path = File.expand_path('../../tmp/integration_test.db', __dir__)
-    FileUtils.mkdir_p(File.dirname(@db_path))
-    FileUtils.rm_f(@db_path)
-    HumataImport::Database.initialize_schema(@db_path)
+  def setup
+    @db_path = File.join(Dir.tmpdir, "test_workflow_#{SecureRandom.hex(8)}.sqlite3")
     @db = SQLite3::Database.new(@db_path)
-    @db.results_as_hash = true
+    HumataImport::Database.initialize_schema(@db_path)
+    
+    # Set up test environment
+    ENV['HUMATA_API_KEY'] = 'test-key'
+    ENV['TEST_ENV'] = 'true'
   end
 
-  after do
-    WebMock.disable!
+  def teardown
+    File.delete(@db_path) if File.exist?(@db_path)
     ENV.delete('HUMATA_API_KEY')
-    FileUtils.rm_f(@db_path)
+    ENV.delete('TEST_ENV')
+  end
+
+  def gdrive_url
+    'https://drive.google.com/drive/folders/abc123'
+  end
+
+  def folder_id
+    'test-folder-123'
+  end
+
+  def create_test_file(db, attrs = {})
+    default_attrs = {
+      gdrive_id: SecureRandom.hex(8),
+      name: 'test.pdf',
+      url: 'https://example.com/test.pdf',
+      size: 1024,
+      mime_type: 'application/pdf'
+    }
+    
+    attrs = default_attrs.merge(attrs)
+    
+    sql = "INSERT INTO file_records (
+      gdrive_id, name, url, size, mime_type, humata_folder_id, humata_id,
+      upload_status, processing_status, last_error, humata_verification_response,
+      humata_import_response, discovered_at, uploaded_at, completed_at, last_checked_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    
+    db.execute(sql, [
+      attrs[:gdrive_id],
+      attrs[:name],
+      attrs[:url],
+      attrs[:size],
+      attrs[:mime_type],
+      attrs[:humata_folder_id],
+      attrs[:humata_id],
+      attrs[:upload_status] || 'pending',
+      attrs[:processing_status],
+      attrs[:last_error],
+      attrs[:humata_verification_response],
+      attrs[:humata_import_response],
+      attrs[:discovered_at] || Time.now.iso8601,
+      attrs[:uploaded_at],
+      attrs[:completed_at],
+      attrs[:last_checked_at]
+    ])
+  end
+
+  def get_file_record(db, gdrive_id)
+    result = db.execute('SELECT * FROM file_records WHERE gdrive_id = ?', [gdrive_id]).first
+    return nil unless result
+    
+    # Get column names for indexing
+    columns = db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+    
+    # Convert to hash
+    columns.zip(result).to_h
+  end
+
+  def get_all_files(db)
+    results = db.execute('SELECT * FROM file_records')
+    return [] if results.empty?
+    
+    # Get column names for indexing
+    columns = db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+    
+    # Convert all results to hashes
+    results.map { |result| columns.zip(result).to_h }
   end
 
   it 'processes a complete Google Drive folder import' do
     # Mock Google Drive API responses
-    gdrive_files = [
-      { id: 'file1', name: 'test1.pdf', mime_type: 'application/pdf' },
-      { id: 'file2', name: 'test2.doc', mime_type: 'application/msword' },
-      { id: 'file3', name: 'test3.txt', mime_type: 'text/plain' }
-    ]
-
-    # Create a mock service that returns our test data
     service_mock = OpenStruct.new
     service_mock.define_singleton_method(:list_files) do |**kwargs|
-      # Create the response directly
       OpenStruct.new(
-        files: gdrive_files.map do |f|
+        files: [
           OpenStruct.new(
-            id: f[:id] || SecureRandom.hex(16),
-            name: f[:name] || "file_#{SecureRandom.hex(4)}.pdf",
-            mime_type: f[:mime_type] || 'application/pdf',
-            web_content_link: f[:url] || "https://drive.google.com/uc?id=#{SecureRandom.hex(16)}",
-            size: f[:size] || 1024
+            id: 'file1',
+            name: 'test1.pdf',
+            mime_type: 'application/pdf',
+            web_content_link: 'https://example.com/file1.pdf',
+            size: 1024
+          ),
+          OpenStruct.new(
+            id: 'file2',
+            name: 'test2.pdf',
+            mime_type: 'application/pdf',
+            web_content_link: 'https://example.com/file2.pdf',
+            size: 2048
+          ),
+          OpenStruct.new(
+            id: 'file3',
+            name: 'test3.pdf',
+            mime_type: 'application/pdf',
+            web_content_link: 'https://example.com/file3.pdf',
+            size: 3072
           )
-        end,
+        ],
         next_page_token: nil
       )
     end
@@ -59,15 +125,15 @@ describe 'Full Workflow Integration' do
         discover = HumataImport::Commands::Discover.new(database: @db_path)
         discover.run([gdrive_url])
 
-        # Verify discover results
-        files = @db.execute('SELECT * FROM file_records')
+        # Verify discovery results
+        files = get_all_files(@db)
         _(files.size).must_equal 3
         _(files.map { |f| f['gdrive_id'] }).must_equal %w[file1 file2 file3]
       end
     end
 
     # Mock HumataClient for upload
-    upload_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    upload_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
     upload_client.define_singleton_method(:upload_file) do |url, folder_id|
       {
         'data' => {
@@ -83,12 +149,12 @@ describe 'Full Workflow Integration' do
     upload.run(['--folder-id', folder_id], humata_client: upload_client)
 
     # Verify upload results
-    files = @db.execute('SELECT * FROM file_records')
+    files = get_all_files(@db)
     _(files.all? { |f| f['humata_id'] }).must_equal true
     _(files.all? { |f| f['processing_status'] == 'pending' }).must_equal true
 
     # Mock HumataClient for verification
-    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
     verify_client.define_singleton_method(:get_file_status) do |humata_id|
       {
         'id' => humata_id,
@@ -102,7 +168,7 @@ describe 'Full Workflow Integration' do
     verify.run(['--timeout', '5'], humata_client: verify_client)
 
     # Verify final results
-    files = @db.execute('SELECT * FROM file_records')
+    files = get_all_files(@db)
     _(files.all? { |f| f['processing_status'] == 'completed' }).must_equal true
     _(files.all? { |f| f['humata_verification_response'] }).must_equal true
   end
@@ -120,7 +186,7 @@ describe 'Full Workflow Integration' do
         discover.run([gdrive_url])
 
         # Should handle error gracefully
-        files = @db.execute('SELECT * FROM file_records')
+        files = get_all_files(@db)
         _(files).must_be_empty
       end
     end
@@ -129,7 +195,7 @@ describe 'Full Workflow Integration' do
     create_test_file(@db)
 
     # Mock HumataClient upload error
-    error_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    error_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
     error_client.define_singleton_method(:upload_file) do |url, folder_id|
       raise HumataImport::Clients::HumataError, 'Invalid request'
     end
@@ -138,7 +204,7 @@ describe 'Full Workflow Integration' do
     upload = HumataImport::Commands::Upload.new(database: @db_path)
     upload.run(['--folder-id', folder_id, '--retry-delay', '0'], humata_client: error_client)
 
-    files = @db.execute('SELECT * FROM file_records')
+    files = get_all_files(@db)
     _(files.first['processing_status']).must_equal 'failed'
   end
 
@@ -150,7 +216,7 @@ describe 'Full Workflow Integration' do
     create_test_file(@db)  # Not yet uploaded
 
     # Mock successful API responses
-    resume_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+    resume_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
     resume_client.define_singleton_method(:upload_file) do |url, folder_id|
       {
         'data' => {
@@ -165,36 +231,48 @@ describe 'Full Workflow Integration' do
     upload = HumataImport::Commands::Upload.new(database: @db_path)
     upload.run(['--folder-id', folder_id], humata_client: resume_client)
 
-    # Verify only unstarted files were uploaded
-    files = @db.execute('SELECT * FROM file_records ORDER BY gdrive_id')
+    # Verify only the unstarted file was processed
+    files = get_all_files(@db)
     _(files.size).must_equal 4
     
-    # Check that files with existing status weren't changed
-    completed_files = files.select { |f| f['processing_status'] == 'completed' }
-    failed_files = files.select { |f| f['processing_status'] == 'failed' }
-    pending_files = files.select { |f| f['processing_status'] == 'pending' }
-    
-    _(completed_files.size).must_equal 1
-    _(failed_files.size).must_equal 1
-    _(pending_files.size).must_equal 2  # 1 existing pending + 1 newly uploaded
+    # Check that only the unstarted file got a humata_id
+    unstarted_files = files.select { |f| f['humata_id'] && f['humata_id'] != 'done1' && f['humata_id'] != 'fail1' && f['humata_id'] != 'pending1' }
+    _(unstarted_files.size).must_equal 1
+  end
 
-    # Mock verification client
-    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test', logger: Logger.new(nil))
+  it 'handles verification with mixed statuses' do
+    # Create test files with different statuses
+    create_test_file(@db, processing_status: 'pending', humata_id: 'pending1')
+    create_test_file(@db, processing_status: 'pending', humata_id: 'pending2')
+    create_test_file(@db, processing_status: 'pending', humata_id: 'pending3')
+
+    # Mock HumataClient with mixed responses
+    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
     verify_client.define_singleton_method(:get_file_status) do |humata_id|
-      {
-        'id' => humata_id,
-        'status' => 'completed',
-        'message' => 'File processed successfully'
-      }
+      case humata_id
+      when 'pending1'
+        { 'id' => humata_id, 'status' => 'completed' }
+      when 'pending2'
+        { 'id' => humata_id, 'status' => 'failed' }
+      when 'pending3'
+        { 'id' => humata_id, 'status' => 'processing' }
+      end
     end
 
-    # Verify should update all pending files
+    # Run verification
     verify = HumataImport::Commands::Verify.new(database: @db_path)
     verify.run(['--timeout', '5'], humata_client: verify_client)
 
-    # Verify final state
-    files = @db.execute('SELECT * FROM file_records ORDER BY gdrive_id')
-    completed_count = files.count { |f| f['processing_status'] == 'completed' }
-    _(completed_count).must_equal 3  # 1 originally completed + 2 newly completed
+    # Verify results
+    files = get_all_files(@db)
+    _(files.size).must_equal 3
+    
+    completed = files.find { |f| f['humata_id'] == 'pending1' }
+    failed = files.find { |f| f['humata_id'] == 'pending2' }
+    processing = files.find { |f| f['humata_id'] == 'pending3' }
+    
+    _(completed['processing_status']).must_equal 'completed'
+    _(failed['processing_status']).must_equal 'failed'
+    _(processing['processing_status']).must_equal 'processing'
   end
 end

@@ -12,18 +12,6 @@ module HumataImport
     # Command for running the complete workflow: discover, upload, and verify.
     # Handles phase coordination and error recovery between phases.
     class Run < Base
-      def logger
-        @logger ||= Logger.new($stdout).tap do |log|
-          if @options[:quiet]
-            log.level = Logger::ERROR
-          elsif @options[:verbose]
-            log.level = Logger::DEBUG
-          else
-            log.level = Logger::INFO
-          end
-        end
-      end
-
       # Runs the complete workflow.
       # @param args [Array<String>] Command-line arguments
       # @return [void]
@@ -72,6 +60,7 @@ module HumataImport
         # Update logger level based on verbose setting
         @options[:verbose] = options[:verbose]
         @options[:quiet] = options[:quiet]
+        logger.configure(@options)
 
         unless ENV['HUMATA_API_KEY']
           logger.error "HUMATA_API_KEY environment variable not set"
