@@ -68,9 +68,9 @@ module HumataImport
 
         # Get pending files from database (including failed uploads to retry)
         sql = if options[:skip_retries]
-          "SELECT * FROM file_records WHERE humata_id IS NULL AND processing_status IS NULL"
+          "SELECT * FROM file_records WHERE humata_id IS NULL AND upload_status = 'pending' AND processing_status IS NULL"
         else
-          "SELECT * FROM file_records WHERE humata_id IS NULL AND (processing_status IS NULL OR processing_status = 'failed')"
+          "SELECT * FROM file_records WHERE humata_id IS NULL AND (upload_status = 'pending' OR processing_status = 'failed')"
         end
         pending_files = @db.execute(sql)
 
@@ -111,9 +111,10 @@ module HumataImport
               if is_retry
                 logger.info "Retrying failed upload: #{file_data['name']} (#{file_data['gdrive_id']})"
                 # Reset status to indicate we're retrying
-                @db.execute(<<-SQL, ['retrying', file_data['gdrive_id']])
+                @db.execute(<<-SQL, ['retrying', 'pending', file_data['gdrive_id']])
                   UPDATE file_records 
-                  SET processing_status = ?
+                  SET processing_status = ?,
+                      upload_status = ?
                   WHERE gdrive_id = ?
                 SQL
               else
@@ -130,10 +131,11 @@ module HumataImport
                 response = client.upload_file(optimized_url, options[:folder_id])
                 
                 # Store response and update status
-                @db.execute(<<-SQL, [response['id'], 'pending', response.to_json, file_data['gdrive_id']])
+                @db.execute(<<-SQL, [response['id'], 'pending', 'completed', response.to_json, file_data['gdrive_id']])
                   UPDATE file_records 
                   SET humata_id = ?,
                       processing_status = ?,
+                      upload_status = ?,
                       humata_import_response = ?
                   WHERE gdrive_id = ?
                 SQL
@@ -155,9 +157,10 @@ module HumataImport
                   logger.error "Upload failed for #{file_data['name']} after #{options[:max_retries]} attempts: #{e.message}"
                   
                   # Record the failure with retry count
-                  @db.execute(<<-SQL, ['failed', { error: e.message, attempts: retries, last_attempt: Time.now.iso8601 }.to_json, file_data['gdrive_id']])
+                  @db.execute(<<-SQL, ['failed', 'failed', { error: e.message, attempts: retries, last_attempt: Time.now.iso8601 }.to_json, file_data['gdrive_id']])
                     UPDATE file_records 
                     SET processing_status = ?,
+                        upload_status = ?,
                         humata_import_response = ?
                     WHERE gdrive_id = ?
                   SQL
