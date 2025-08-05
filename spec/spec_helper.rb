@@ -14,6 +14,10 @@ require 'webmock/minitest'
 # Set test environment
 ENV['TEST_ENV'] = 'true'
 
+# Configure WebMock to block all external HTTP requests by default
+WebMock.enable!
+WebMock.disable_net_connect!(allow_localhost: true)
+
 # Load the main library
 require 'humata_import'
 
