@@ -21,6 +21,11 @@ WebMock.disable_net_connect!(allow_localhost: true)
 # Load the main library
 require 'humata_import'
 
+# Configure logger for test mode
+# Only show errors by default, unless TEST_VERBOSE is set
+test_verbose = ENV['TEST_VERBOSE'] == 'true'
+HumataImport::Logger.instance.configure_for_tests(verbose: test_verbose)
+
 # Test helper methods for creating test data and mocking
 module TestHelpers
   # Creates a test file record in the database

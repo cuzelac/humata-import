@@ -165,12 +165,20 @@ bundle exec rake test
 # Run all tests
 bundle exec rake test
 
+# Run tests with verbose logging (shows all log levels)
+bundle exec rake test_verbose
+
 # Run specific test file
 bundle exec ruby -Ilib:test test/path/to/test_file.rb
 
 # Run with verbose output
 bundle exec rake test TESTOPTS="--verbose"
 ```
+
+**Test Logging Behavior:**
+- By default, tests only show fatal-level log messages to keep output clean
+- Use `rake test_verbose` to see all log levels (debug, info, warn, error, fatal) during tests
+- This helps with debugging while keeping normal test runs quiet
 
 ### Contributing
 
