@@ -35,7 +35,7 @@ describe 'Error Handling Integration' do
       end
 
       Google::Apis::DriveV3::DriveService.stub :new, service_mock do
-        Google::Auth.stub :get_application_default, -> { raise Google::Auth::AuthorizationError, 'Invalid credentials' } do
+        Google::Auth.stub :get_application_default, ->(scopes) { raise Google::Auth::Error, 'Invalid credentials' } do
           discover = HumataImport::Commands::Discover.new(database: @db_path)
           discover.run([gdrive_url])
 

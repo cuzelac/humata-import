@@ -6,12 +6,10 @@ describe HumataImport::Clients::GdriveClient do
   include TestHelpers
   
   let(:client) do
-    # Mock Google Auth
-    auth_mock = Minitest::Mock.new
-    auth_mock.expect(:authorization=, nil, [nil])
+    # Create a mock service to skip authentication
+    service_mock = OpenStruct.new
     
-    client = HumataImport::Clients::GdriveClient.new
-    client.instance_variable_set(:@service, auth_mock)
+    client = HumataImport::Clients::GdriveClient.new(service: service_mock)
     client
   end
   let(:folder_url) { 'https://drive.google.com/drive/folders/abc123' }
