@@ -27,7 +27,8 @@ module HumataImport
         options = {
           recursive: true,
           file_types: DEFAULT_FILE_TYPES,
-          max_files: nil
+          max_files: nil,
+          verbose: @options[:verbose]
         }
         parser = OptionParser.new do |opts|
           opts.banner = "Usage: humata-import discover <gdrive-url> [options]"
@@ -35,6 +36,7 @@ module HumataImport
           opts.on('--no-recursive', 'Do not crawl subfolders') { options[:recursive] = false }
           opts.on('--file-types x,y,z', Array, 'Filter by file types (default: pdf,doc,docx,txt)') { |v| options[:file_types] = v.map(&:strip) }
           opts.on('--max-files N', Integer, 'Limit number of files to discover') { |v| options[:max_files] = v }
+          opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
