@@ -1,0 +1,147 @@
+---
+title: Ruby Testing Standards
+description: Establishes standards for testing Ruby code using minitest framework
+globs: *.rb
+alwaysApply: false
+---
+
+# Ruby Testing Standards Rule
+
+## Description
+This rule establishes standards for testing Ruby code, ensuring consistent use of minitest as the testing framework and maintaining high test quality.
+
+## Rule
+When writing tests for Ruby code:
+
+1. **Testing Framework**
+   - MUST use minitest as the testing framework
+   - MUST use minitest/spec DSL for test structure
+   - MUST NOT use RSpec, Test::Unit, or other testing frameworks
+   - MUST include minitest/autorun, minitest/spec, and minitest/mock in test files
+
+2. **Test File Organization**
+   - Test files MUST be placed in `spec/` directory
+   - Test files MUST end with `_spec.rb` suffix
+   - Test files MUST require 'spec_helper' at the top
+   - Unit tests go in `spec/unit/`
+   - Integration tests go in `spec/integration/`
+
+3. **Test Structure**
+   - Use `describe` blocks for grouping related tests
+   - Use `it` blocks for individual test cases
+   - Use descriptive test names that explain the expected behavior
+   - Use `before_all`, `after_all`, `before_each`, `after_each` for setup/teardown
+   - Include `Minitest::Hooks` for lifecycle methods
+
+4. **Assertions and Expectations**
+   - Use minitest assertions: `assert`, `assert_equal`, `assert_nil`, etc.
+   - Use expectation syntax: `_(actual).must_equal expected`
+   - Use `wont_be_nil`, `must_be_nil`, `must_include`, etc. for readability
+   - Provide clear failure messages in assertions
+
+5. **Mocking and Stubbing**
+   - Use `Minitest::Mock` for creating mock objects
+   - Use `stub` method for method stubbing
+   - Verify mock expectations with `verify`
+   - Use WebMock for HTTP request mocking
+
+6. **Test Data and Helpers**
+   - Use `TestHelpers` module for common test utilities
+   - Create test data using helper methods like `create_test_file`
+   - Use `SecureRandom` for generating unique test data
+   - Clean up test data in `after_each` or `after_all`
+
+## Examples
+
+✅ Good:
+```ruby
+# frozen_string_literal: true
+
+require 'spec_helper'
+
+module HumataImport
+  module Commands
+    describe Upload do
+      def before_all
+        super
+        @folder_id = 'test-folder-123'
+        @api_key = 'test-api-key'
+        ENV['HUMATA_API_KEY'] = @api_key
+      end
+
+      def after_all
+        super
+        ENV.delete('HUMATA_API_KEY')
+      end
+
+      def before_each
+        super
+        @db.execute('DELETE FROM file_records')
+        @db.results_as_hash = true
+      end
+
+      it 'uploads a single file successfully' do
+        file_data = create_test_file(@db, { 
+          name: 'test1.pdf', 
+          url: 'https://example.com/file1.pdf' 
+        })
+
+        client_mock = Minitest::Mock.new
+        client_mock.expect :upload_file, 
+          { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, 
+          [String, @folder_id]
+
+        upload = Upload.new(database: @temp_db_path)
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
+
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 1
+        
+        file = files.first
+        _(file['humata_id']).must_equal 'humata-1'
+        _(file['processing_status']).must_equal 'pending'
+        _(file['uploaded_at']).wont_be_nil
+        
+        client_mock.verify
+      end
+    end
+  end
+end
+```
+
+❌ Bad:
+```ruby
+# Don't use RSpec or other frameworks
+require 'rspec'
+require 'factory_bot'
+
+RSpec.describe Upload do
+  before(:each) do
+    # RSpec syntax
+  end
+
+  it 'should upload file' do
+    expect(result).to eq(expected)
+  end
+end
+```
+
+## Benefits
+- Consistent testing framework across the project
+- Faster test execution with minitest
+- Better integration with Ruby standard library
+- Clear and readable test syntax
+- Reduced external dependencies
+
+## Test Execution
+- Run tests with: `bundle exec rake test`
+- Run verbose tests with: `bundle exec rake test_verbose`
+- Individual test files can be run directly with Ruby
+- Tests automatically run when using `bundle exec ruby spec/path/to/test_spec.rb`
+
+## Dependencies
+- minitest (included in Ruby standard library)
+- minitest/spec for spec DSL
+- minitest/mock for mocking
+- minitest/hooks for lifecycle methods
+- webmock/minitest for HTTP mocking

@@ -95,7 +95,7 @@ describe 'Error Handling Integration' do
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
         @call_count = call_count
-        raise HumataImport::Clients::HumataError, 'Invalid API key'
+        raise HumataImport::HumataError, 'Invalid API key'
       end
       
       def mock_client.call_count
@@ -121,7 +121,7 @@ describe 'Error Handling Integration' do
         @call_count = call_count
         
         if call_count <= 9  # First 9 calls fail (3 files × 3 attempts each)
-          raise HumataImport::Clients::HumataError, 'Rate limit exceeded'
+          raise HumataImport::TransientError, 'Rate limit exceeded'
         else
           {
             'id' => SecureRandom.uuid,
@@ -154,7 +154,7 @@ describe 'Error Handling Integration' do
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
         @call_count = call_count
-        raise HumataImport::Clients::HumataError, 'HTTP request failed: timeout'
+        raise HumataImport::NetworkError, 'HTTP request failed: timeout'
       end
       
       def mock_client.call_count
@@ -176,7 +176,7 @@ describe 'Error Handling Integration' do
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
         @call_count = call_count
-        raise HumataImport::Clients::HumataError, 'Invalid file format'
+        raise HumataImport::ValidationError, 'Invalid file format'
       end
       
       def mock_client.call_count

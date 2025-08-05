@@ -197,7 +197,7 @@ describe 'Full Workflow Integration' do
     # Mock HumataClient upload error
     error_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
     error_client.define_singleton_method(:upload_file) do |url, folder_id|
-      raise HumataImport::Clients::HumataError, 'Invalid request'
+              raise HumataImport::HumataError, 'Invalid request'
     end
 
     # Upload should handle error

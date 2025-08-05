@@ -1,9 +1,17 @@
-# lib/humata_import/commands/base.rb
+# frozen_string_literal: true
+
+# Base command class providing shared functionality for all command implementations.
+# Handles database connection, logger configuration, and common option processing.
+#
+# @author Humata Import Team
+# @since 0.1.0
 require_relative '../database'
 require_relative '../logger'
 
 module HumataImport
   module Commands
+    # Base class for all command implementations.
+    # Provides shared functionality including database connection and logger access.
     class Base
       attr_reader :db, :options
       

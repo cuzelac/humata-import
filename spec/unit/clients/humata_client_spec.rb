@@ -19,6 +19,26 @@ describe HumataImport::Clients::HumataClient do
     WebMock.disable!
   end
 
+  def mock_humata_upload_response
+    {
+      'data' => {
+        'pdf' => {
+          'id' => humata_id,
+          'status' => 'pending'
+        }
+      }
+    }
+  end
+
+  def mock_humata_status_response
+    {
+      'id' => humata_id,
+      'status' => 'completed',
+      'created_at' => '2024-01-01T00:00:00Z',
+      'updated_at' => '2024-01-01T00:00:00Z'
+    }
+  end
+
   describe '#upload_file' do
     it 'successfully uploads a file' do
       response_body = mock_humata_upload_response
@@ -50,7 +70,7 @@ describe HumataImport::Clients::HumataClient do
         )
 
       _(-> { client.upload_file(file_url, folder_id) })
-        .must_raise HumataImport::Clients::HumataError
+        .must_raise HumataImport::HumataError
     end
 
     it 'handles network errors' do
@@ -58,7 +78,7 @@ describe HumataImport::Clients::HumataClient do
         .to_timeout
 
       _(-> { client.upload_file(file_url, folder_id) })
-        .must_raise HumataImport::Clients::HumataError
+        .must_raise HumataImport::NetworkError
     end
 
     it 'enforces rate limiting' do
@@ -110,7 +130,7 @@ describe HumataImport::Clients::HumataClient do
         )
 
       _(-> { client.get_file_status(humata_id) })
-        .must_raise HumataImport::Clients::HumataError
+        .must_raise HumataImport::HumataError
     end
 
     it 'handles network errors' do
@@ -118,7 +138,7 @@ describe HumataImport::Clients::HumataClient do
         .to_timeout
 
       _(-> { client.get_file_status(humata_id) })
-        .must_raise HumataImport::Clients::HumataError
+        .must_raise HumataImport::NetworkError
     end
 
     it 'enforces rate limiting' do

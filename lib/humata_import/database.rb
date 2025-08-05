@@ -1,11 +1,40 @@
+# frozen_string_literal: true
+
+# Database management class for SQLite operations.
+#
+# This file provides the Database class for managing SQLite connections,
+# schema initialization, and transaction management for the import tool.
+#
+# Dependencies:
+#   - sqlite3 (gem)
+#
+# Configuration:
+#   - Accepts database file path as argument
+#
+# Side Effects:
+#   - Creates or modifies the SQLite database file
+#   - Alters schema if needed
+#
+# @author Humata Import Team
+# @since 0.1.0
 require 'sqlite3'
 
 module HumataImport
+  # Database management class for SQLite operations.
+  # Provides connection management and schema initialization for the import tool.
   class Database
+    # Creates a new SQLite database connection.
+    #
+    # @param db_path [String] Path to the database file
+    # @return [SQLite3::Database] Database connection instance
     def self.connect(db_path)
       SQLite3::Database.new(db_path)
     end
 
+    # Initializes the database schema with required tables and indexes.
+    #
+    # @param db_path [String] Path to the database file
+    # @return [void]
     def self.initialize_schema(db_path)
       db = connect(db_path)
       db.execute_batch <<-SQL

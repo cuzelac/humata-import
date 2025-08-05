@@ -1,8 +1,35 @@
-# lib/humata_import/cli.rb
+# frozen_string_literal: true
+
+# Main CLI interface for the Humata.ai Google Drive Import Tool.
+#
+# This file provides the main entry point for the CLI, handling global
+# options, command routing, and help output. It depends on OptionParser
+# from Ruby stdlib and loads all command implementations.
+#
+# Dependencies:
+#   - OptionParser (stdlib)
+#   - All command classes in lib/humata_import/commands/
+#
+# Configuration:
+#   - Accepts --database and --verbose global options
+#   - Uses ENV for any environment-specific config
+#
+# Side Effects:
+#   - Exits the process on help or invalid command
+#   - Prints to stdout
+#
+# @author Humata Import Team
+# @since 0.1.0
 require 'optparse'
 
 module HumataImport
+  # Main CLI class that handles command routing and global options.
+  # Provides a unified interface for all import tool commands.
   class CLI
+    # Runs the CLI, parsing global options and routing to the appropriate command.
+    #
+    # @param argv [Array<String>] The command-line arguments
+    # @return [void]
     def run(argv)
       options = {
         database: './import_session.db',
@@ -46,6 +73,9 @@ module HumataImport
 
     private
 
+    # Prints the list of available commands and help usage.
+    #
+    # @return [void]
     def print_commands_help
       puts "\nAvailable commands:"
       puts "  discover  - Discover files in a Google Drive folder"

@@ -1,5 +1,27 @@
 # frozen_string_literal: true
 
+# Command for uploading discovered files to Humata.ai.
+#
+# This file provides the Upload command for uploading files from the database
+# to Humata.ai. Handles batch processing, retry logic, rate limiting, and
+# response storage.
+#
+# Dependencies:
+#   - optparse (stdlib)
+#   - HumataImport::Clients::HumataClient
+#   - HumataImport::FileRecord
+#   - HumataImport::Utils::UrlConverter
+#
+# Configuration:
+#   - Requires HUMATA_API_KEY environment variable
+#
+# Side Effects:
+#   - Updates file_records table in database
+#   - Makes HTTP requests to Humata API
+#   - Prints to stdout
+#
+# @author Humata Import Team
+# @since 0.1.0
 require 'optparse'
 require_relative 'base'
 require_relative '../clients/humata_client'
@@ -13,17 +35,37 @@ module HumataImport
     # Handles batch processing, rate limiting, and response storage.
     class Upload < Base
       # Runs the upload command.
+      #
       # @param args [Array<String>] Command-line arguments
       # @param humata_client [HumataImport::Clients::HumataClient, nil] Optional Humata client for dependency injection
       # @return [void]
       # @raise [ArgumentError] If required options are missing
       def run(args, humata_client: nil)
+        options = parse_options(args)
+        configure_logger(options)
+        validate_required_options(options)
+        
+        client = setup_client(humata_client)
+        pending_files = get_pending_files(options)
+        
+        return if pending_files.empty?
+        
+        process_uploads(client, pending_files, options)
+      end
+
+      private
+
+      # Parses command-line options.
+      #
+      # @param args [Array<String>] Command-line arguments
+      # @return [Hash] Parsed options
+      def parse_options(args)
         options = {
           batch_size: 10,
           max_retries: 3,
           retry_delay: 5,
           skip_retries: false,
-          verbose: @options[:verbose],  # Start with global verbose setting
+          verbose: @options[:verbose],
           quiet: @options[:quiet]
         }
 
@@ -40,169 +82,257 @@ module HumataImport
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
+        options
+      end
 
-        # Update logger level based on verbose setting
+      # Configures the logger based on options.
+      #
+      # @param options [Hash] Parsed options
+      # @return [void]
+      def configure_logger(options)
         @options[:verbose] = options[:verbose]
         @options[:quiet] = options[:quiet]
         logger.configure(@options)
+      end
 
+      # Validates that required options are present.
+      #
+      # @param options [Hash] Parsed options
+      # @return [void]
+      # @raise [ArgumentError] If required options are missing
+      def validate_required_options(options)
         unless options[:folder_id]
-          puts parser
+          puts "Error: --folder-id is required"
           exit 1
         end
+      end
 
-        # Use injected client or create default one
-        client = humata_client
-        unless client
-          api_key = ENV['HUMATA_API_KEY']
-          unless api_key
-            logger.error "HUMATA_API_KEY environment variable not set"
-            exit 1
-          end
-          client = HumataImport::Clients::HumataClient.new(
-            api_key: api_key
-          )
-        end
-
-        # Get pending files from database (including failed uploads to retry)
-        if options[:file_id]
-          # Upload specific file by gdrive_id
-          sql = "SELECT * FROM file_records WHERE gdrive_id = ?"
-          pending_files = @db.execute(sql, [options[:file_id]])
-          
-          if pending_files.empty?
-            logger.error "No file found with gdrive_id: #{options[:file_id]}"
-            exit 1
-          end
-          
-          # Convert the first result to hash for logging
-          columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
-          first_file = columns.zip(pending_files.first).to_h
-          logger.info "Found file to upload: #{first_file['name']} (#{options[:file_id]})"
-        else
-          # Get all pending files
-          sql = if options[:skip_retries]
-            "SELECT * FROM file_records WHERE humata_id IS NULL AND upload_status = 'pending' AND processing_status IS NULL"
-          else
-            "SELECT * FROM file_records WHERE humata_id IS NULL AND (upload_status = 'pending' OR processing_status = 'failed')"
-          end
-          pending_files = @db.execute(sql)
-
-          if pending_files.empty?
-            logger.info "No pending files found for upload."
-            return
-          end
-        end
-
-        # Count retries vs new uploads
-        if options[:file_id]
-          # Single file upload - no need for retry counting
-          logger.info "Uploading single file by ID."
-        elsif options[:skip_retries]
-          logger.info "Found #{pending_files.size} new files pending upload (retries skipped)."
-        else
-          retry_count = pending_files.count { |file| file.is_a?(Hash) ? file['processing_status'] == 'failed' : file[8] == 'failed' }
-          new_count = pending_files.size - retry_count
-          
-          logger.info "Found #{pending_files.size} files pending upload."
-          logger.info "  New uploads: #{new_count}"
-          logger.info "  Retries: #{retry_count}"
+      # Sets up the Humata client.
+      #
+      # @param humata_client [HumataImport::Clients::HumataClient, nil] Optional injected client
+      # @return [HumataImport::Clients::HumataClient] Configured client
+      def setup_client(humata_client)
+        return humata_client if humata_client
+        
+        api_key = ENV['HUMATA_API_KEY']
+        unless api_key
+          logger.error "HUMATA_API_KEY environment variable not set"
+          exit 1
         end
         
-        uploaded = 0
-        failed = 0
+        HumataImport::Clients::HumataClient.new(api_key: api_key)
+      end
 
-        # For single file upload, set batch size to 1 for simpler processing
-        batch_size = options[:file_id] ? 1 : options[:batch_size]
+      # Gets pending files from the database.
+      #
+      # @param options [Hash] Parsed options
+      # @return [Array<Array>] Array of pending file records
+      def get_pending_files(options)
+        if options[:file_id]
+          get_specific_file(options[:file_id])
+        else
+          get_all_pending_files(options[:skip_retries])
+        end
+      end
+
+      # Gets a specific file by gdrive_id.
+      #
+      # @param file_id [String] The gdrive_id to find
+      # @return [Array<Array>] Array containing the file record
+      def get_specific_file(file_id)
+        sql = "SELECT * FROM file_records WHERE gdrive_id = ?"
+        pending_files = @db.execute(sql, [file_id])
+        
+        if pending_files.empty?
+          logger.error "No file found with gdrive_id: #{file_id}"
+          exit 1
+        end
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        first_file = columns.zip(pending_files.first).to_h
+        logger.info "Found file to upload: #{first_file['name']} (#{file_id})"
+        
+        pending_files
+      end
+
+      # Gets all pending files from the database.
+      #
+      # @param skip_retries [Boolean] Whether to skip retrying failed uploads
+      # @return [Array<Array>] Array of pending file records
+      def get_all_pending_files(skip_retries)
+        sql = if skip_retries
+          "SELECT * FROM file_records WHERE humata_id IS NULL AND upload_status = 'pending' AND processing_status IS NULL"
+        else
+          "SELECT * FROM file_records WHERE humata_id IS NULL AND (upload_status = 'pending' OR processing_status = 'failed')"
+        end
+        pending_files = @db.execute(sql)
+
+        if pending_files.empty?
+          logger.info "No pending files found for upload."
+          return []
+        end
+
+        pending_files
+      end
+
+      # Processes the uploads in batches.
+      #
+      # @param client [HumataImport::Clients::HumataClient] The Humata client
+      # @param pending_files [Array<Array>] Array of pending file records
+      # @param options [Hash] Parsed options
+      # @return [void]
+      def process_uploads(client, pending_files, options)
+        if options[:file_id]
+          logger.info "Uploading single file by ID."
+        else
+          count_retries_vs_new_uploads(pending_files)
+        end
 
         # Process files in batches
-        pending_files.each_slice(batch_size) do |batch|
-          batch.each do |file|
-            begin
-              # Convert array result to hash using column names
-              if file.is_a?(Hash)
-                file_data = file
-              else
-                columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
-                file_data = columns.zip(file).to_h
-              end
-              
-              # Check if this is a retry of a failed upload
-              is_retry = file_data['processing_status'] == 'failed'
-              if is_retry
-                logger.info "Retrying failed upload: #{file_data['name']} (#{file_data['gdrive_id']})"
-                # Reset status to indicate we're retrying
-                @db.execute(<<-SQL, ['retrying', 'pending', file_data['gdrive_id']])
-                  UPDATE file_records 
-                  SET processing_status = ?,
-                      upload_status = ?
-                  WHERE gdrive_id = ?
-                SQL
-              else
-                logger.debug "Uploading: #{file_data['name']} (#{file_data['gdrive_id']})"
-              end
-              
-              retries = 0
-              begin
-                # Optimize URL to reduce 500 errors
-                optimized_url = HumataImport::Utils::UrlConverter.optimize_for_humata(file_data['url'])
-                logger.debug "Original URL: #{file_data['url']}"
-                logger.debug "Optimized URL: #{optimized_url}" if optimized_url != file_data['url']
-                
-                response = client.upload_file(optimized_url, options[:folder_id])
-                
-                # Extract Humata ID from nested response structure
-                humata_id = response.dig('data', 'pdf', 'id') || response['id']
-                
-                # Store response and update status
-                @db.execute(<<-SQL, [humata_id, 'pending', 'completed', response.to_json, Time.now.iso8601, file_data['gdrive_id']])
-                  UPDATE file_records 
-                  SET humata_id = ?,
-                      processing_status = ?,
-                      upload_status = ?,
-                      humata_import_response = ?,
-                      uploaded_at = ?
-                  WHERE gdrive_id = ?
-                SQL
+        pending_files.each_slice(options[:batch_size]) do |batch|
+          process_batch(client, batch, options)
+        end
 
-                uploaded += 1
-                if is_retry
-                  logger.info "Retry successful: #{file_data['name']} (Humata ID: #{humata_id})"
-                else
-                  logger.debug "Success: #{file_data['name']} (Humata ID: #{humata_id})"
-                end
-              rescue HumataImport::Clients::HumataError => e
-                retries += 1
-                if retries <= options[:max_retries]
-                  logger.warn "Upload failed for #{file_data['name']}, attempt #{retries}/#{options[:max_retries]}: #{e.message}"
-                  sleep options[:retry_delay]
-                  retry
-                else
-                  failed += 1
-                  logger.error "Upload failed for #{file_data['name']} after #{options[:max_retries]} attempts: #{e.message}"
-                  
-                  # Record the failure with retry count
-                  @db.execute(<<-SQL, ['failed', 'failed', { error: e.message, attempts: retries, last_attempt: Time.now.iso8601 }.to_json, file_data['gdrive_id']])
-                    UPDATE file_records 
-                    SET processing_status = ?,
-                        upload_status = ?,
-                        humata_import_response = ?
-                    WHERE gdrive_id = ?
-                  SQL
-                end
-              end
-            rescue StandardError => e
-              failed += 1
-              file_name = file.is_a?(Hash) ? file['name'] : file.to_s
-              logger.error "Unexpected error processing #{file_name}: #{e.message}"
-            end
+        logger.info "Upload processing completed."
+      end
+
+      # Counts retries vs new uploads for logging.
+      #
+      # @param pending_files [Array<Array>] Array of pending file records
+      # @return [void]
+      def count_retries_vs_new_uploads(pending_files)
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        retry_count = 0
+        new_count = 0
+
+        pending_files.each do |file_data|
+          file_hash = columns.zip(file_data).to_h
+          if file_hash['processing_status'] == 'failed'
+            retry_count += 1
+          else
+            new_count += 1
           end
         end
 
-        logger.info "\nSummary:"
-        logger.info "  Uploaded: #{uploaded} files"
-        logger.info "  Failed:   #{failed} files"
-        logger.info "  Total:    #{uploaded + failed} files processed"
+        logger.info "Found #{pending_files.size} files to process: #{new_count} new, #{retry_count} retries"
+      end
+
+      # Processes a batch of files.
+      #
+      # @param client [HumataImport::Clients::HumataClient] The Humata client
+      # @param batch [Array<Array>] Batch of file records
+      # @param options [Hash] Parsed options
+      # @return [void]
+      def process_batch(client, batch, options)
+        batch.each do |file_data|
+          process_single_file(client, file_data, options)
+        end
+      end
+
+      # Processes a single file upload.
+      #
+      # @param client [HumataImport::Clients::HumataClient] The Humata client
+      # @param file_data [Array] File record data
+      # @param options [Hash] Parsed options
+      # @return [void]
+      def process_single_file(client, file_data, options)
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        file_hash = columns.zip(file_data).to_h
+        
+        gdrive_id = file_hash['gdrive_id']
+        name = file_hash['name']
+        url = file_hash['url']
+        
+        logger.info "Uploading: #{name} (#{gdrive_id})"
+        
+        begin
+          # Optimize URL for Humata
+          optimized_url = HumataImport::Utils::UrlConverter.optimize_for_humata(url)
+          
+          # Upload to Humata
+          response = client.upload_file(optimized_url, options[:folder_id])
+          
+          # Store response and update status
+          humata_id = response.dig('data', 'pdf', 'id')
+          if humata_id
+            update_file_success(gdrive_id, humata_id, response)
+            logger.info "✓ Successfully uploaded: #{name} (Humata ID: #{humata_id})"
+          else
+            update_file_failure(gdrive_id, "No Humata ID in response", response)
+            logger.error "✗ Failed to upload: #{name} - No Humata ID in response"
+          end
+        rescue HumataImport::TransientError => e
+          handle_transient_error(gdrive_id, name, e, options)
+        rescue HumataImport::PermanentError => e
+          handle_permanent_error(gdrive_id, name, e)
+        rescue StandardError => e
+          handle_unexpected_error(gdrive_id, name, e)
+        end
+      end
+
+      # Updates file record on successful upload.
+      #
+      # @param gdrive_id [String] Google Drive file ID
+      # @param humata_id [String] Humata file ID
+      # @param response [Hash] API response
+      # @return [void]
+      def update_file_success(gdrive_id, humata_id, response)
+        @db.execute(
+          "UPDATE file_records SET humata_id = ?, upload_status = 'completed', processing_status = 'pending', humata_import_response = ?, uploaded_at = datetime('now') WHERE gdrive_id = ?",
+          [humata_id, response.to_json, gdrive_id]
+        )
+      end
+
+      # Updates file record on upload failure.
+      #
+      # @param gdrive_id [String] Google Drive file ID
+      # @param error_message [String] Error message
+      # @param response [Hash] API response
+      # @return [void]
+      def update_file_failure(gdrive_id, error_message, response)
+        @db.execute(
+          "UPDATE file_records SET upload_status = 'failed', processing_status = 'failed', last_error = ?, humata_import_response = ? WHERE gdrive_id = ?",
+          [error_message, response.to_json, gdrive_id]
+        )
+      end
+
+      # Handles transient errors with retry logic.
+      #
+      # @param gdrive_id [String] Google Drive file ID
+      # @param name [String] File name
+      # @param error [HumataImport::TransientError] The error
+      # @param options [Hash] Parsed options
+      # @return [void]
+      def handle_transient_error(gdrive_id, name, error, options)
+        if options[:skip_retries]
+          update_file_failure(gdrive_id, error.message, {})
+          logger.error "✗ Failed to upload: #{name} - #{error.message} (retries skipped)"
+        else
+          update_file_failure(gdrive_id, error.message, {})
+          logger.warn "⚠ Retryable error for: #{name} - #{error.message}"
+        end
+      end
+
+      # Handles permanent errors.
+      #
+      # @param gdrive_id [String] Google Drive file ID
+      # @param name [String] File name
+      # @param error [HumataImport::PermanentError] The error
+      # @return [void]
+      def handle_permanent_error(gdrive_id, name, error)
+        update_file_failure(gdrive_id, error.message, {})
+        logger.error "✗ Permanent error for: #{name} - #{error.message}"
+      end
+
+      # Handles unexpected errors.
+      #
+      # @param gdrive_id [String] Google Drive file ID
+      # @param name [String] File name
+      # @param error [StandardError] The error
+      # @return [void]
+      def handle_unexpected_error(gdrive_id, name, error)
+        update_file_failure(gdrive_id, error.message, {})
+        logger.error "✗ Unexpected error for: #{name} - #{error.message}"
       end
     end
   end
