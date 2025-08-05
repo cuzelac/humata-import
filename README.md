@@ -20,7 +20,8 @@ A Ruby command-line tool for importing files from Google Drive folders into Huma
   - Multiple output formats (text/JSON/CSV)
 
 - 🛠 **Robust Error Handling**
-  - Automatic retries
+  - Automatic retries with configurable limits
+  - Failed upload retry on subsequent runs
   - Rate limiting
   - Comprehensive error reporting
 
@@ -92,6 +93,20 @@ rake install
      --database ./import_session.db
    ```
 
+   **Retry failed uploads:**
+   ```bash
+   # Automatically retry failed uploads (default behavior)
+   humata-import upload \
+     --folder-id "your-humata-folder-id" \
+     --database ./import_session.db
+
+   # Skip retrying failed uploads
+   humata-import upload \
+     --folder-id "your-humata-folder-id" \
+     --skip-retries \
+     --database ./import_session.db
+   ```
+
 3. **Verify processing**
    ```bash
    humata-import verify \
@@ -104,6 +119,14 @@ rake install
    ```bash
    humata-import status \
      --format text \
+     --database ./import_session.db
+   ```
+
+   **View failed uploads:**
+   ```bash
+   # Show only failed uploads ready for retry
+   humata-import status \
+     --failed-only \
      --database ./import_session.db
    ```
 

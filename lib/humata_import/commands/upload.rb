@@ -27,6 +27,7 @@ module HumataImport
           batch_size: 10,
           max_retries: 3,
           retry_delay: 5,
+          skip_retries: false,
           verbose: @options[:verbose]  # Start with global verbose setting
         }
 
@@ -36,6 +37,7 @@ module HumataImport
           opts.on('--batch-size N', Integer, 'Number of files to process in parallel (default: 10)') { |v| options[:batch_size] = v }
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Seconds to wait between retries (default: 5)') { |v| options[:retry_delay] = v }
+          opts.on('--skip-retries', 'Skip retrying failed uploads') { options[:skip_retries] = true }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
@@ -63,19 +65,31 @@ module HumataImport
           )
         end
 
-        # Get pending files from database
-        pending_files = @db.execute(<<-SQL)
-          SELECT * FROM file_records 
-          WHERE humata_id IS NULL 
-          AND processing_status IS NULL
-        SQL
+        # Get pending files from database (including failed uploads to retry)
+        sql = if options[:skip_retries]
+          "SELECT * FROM file_records WHERE humata_id IS NULL AND processing_status IS NULL"
+        else
+          "SELECT * FROM file_records WHERE humata_id IS NULL AND (processing_status IS NULL OR processing_status = 'failed')"
+        end
+        pending_files = @db.execute(sql)
 
         if pending_files.empty?
           logger.info "No pending files found for upload."
           return
         end
 
-        logger.info "Found #{pending_files.size} files pending upload."
+        # Count retries vs new uploads
+        if options[:skip_retries]
+          logger.info "Found #{pending_files.size} new files pending upload (retries skipped)."
+        else
+          retry_count = pending_files.count { |file| file.is_a?(Hash) ? file['processing_status'] == 'failed' : file[8] == 'failed' }
+          new_count = pending_files.size - retry_count
+          
+          logger.info "Found #{pending_files.size} files pending upload."
+          logger.info "  New uploads: #{new_count}"
+          logger.info "  Retries: #{retry_count}"
+        end
+        
         uploaded = 0
         failed = 0
 
@@ -83,16 +97,30 @@ module HumataImport
         pending_files.each_slice(options[:batch_size]) do |batch|
           batch.each do |file|
             begin
+              # Convert array result to hash using column names
+              if file.is_a?(Hash)
+                file_data = file
+              else
+                columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+                file_data = columns.zip(file).to_h
+              end
+              
+              # Check if this is a retry of a failed upload
+              is_retry = file_data['processing_status'] == 'failed'
+              if is_retry
+                logger.info "Retrying failed upload: #{file_data['name']} (#{file_data['gdrive_id']})"
+                # Reset status to indicate we're retrying
+                @db.execute(<<-SQL, ['retrying', file_data['gdrive_id']])
+                  UPDATE file_records 
+                  SET processing_status = ?
+                  WHERE gdrive_id = ?
+                SQL
+              else
+                logger.debug "Uploading: #{file_data['name']} (#{file_data['gdrive_id']})"
+              end
+              
               retries = 0
               begin
-                # Convert array result to hash using column names
-                if file.is_a?(Hash)
-                  file_data = file
-                else
-                  columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
-                  file_data = columns.zip(file).to_h
-                end
-                logger.debug "Uploading: #{file_data['name']} (#{file_data['gdrive_id']})"
                 response = client.upload_file(file_data['url'], options[:folder_id])
                 
                 # Store response and update status
@@ -105,7 +133,11 @@ module HumataImport
                 SQL
 
                 uploaded += 1
-                logger.debug "Success: #{file_data['name']} (Humata ID: #{response['id']})"
+                if is_retry
+                  logger.info "Retry successful: #{file_data['name']} (Humata ID: #{response['id']})"
+                else
+                  logger.debug "Success: #{file_data['name']} (Humata ID: #{response['id']})"
+                end
               rescue HumataImport::Clients::HumataError => e
                 retries += 1
                 if retries <= options[:max_retries]
@@ -116,8 +148,8 @@ module HumataImport
                   failed += 1
                   logger.error "Upload failed for #{file_data['name']} after #{options[:max_retries]} attempts: #{e.message}"
                   
-                  # Record the failure
-                  @db.execute(<<-SQL, ['failed', { error: e.message, attempts: retries }.to_json, file_data['gdrive_id']])
+                  # Record the failure with retry count
+                  @db.execute(<<-SQL, ['failed', { error: e.message, attempts: retries, last_attempt: Time.now.iso8601 }.to_json, file_data['gdrive_id']])
                     UPDATE file_records 
                     SET processing_status = ?,
                         humata_import_response = ?

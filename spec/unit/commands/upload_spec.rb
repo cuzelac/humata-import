@@ -238,6 +238,87 @@ module HumataImport
         
         client_mock.verify
       end
+
+      it 'retries failed uploads on subsequent runs' do
+        # Create a file that previously failed
+        create_test_file(@db, { 
+          gdrive_id: 'failed-file', 
+          name: 'failed.pdf', 
+          url: 'https://example.com/failed.pdf',
+          processing_status: 'failed',
+          humata_import_response: { error: 'API error', attempts: 3, last_attempt: Time.now.iso8601 }.to_json
+        })
+
+        # Create mock HumataClient that succeeds on retry
+        client_mock = Minitest::Mock.new
+        client_mock.expect :upload_file, { 'id' => 'humata-retry-success', 'status' => 'pending' }, [String, @folder_id]
+
+        upload = Upload.new(database: @db_path)
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
+
+        # Verify the failed file was retried and succeeded
+        file = get_file_record('failed-file')
+        _(file['humata_id']).must_equal 'humata-retry-success'
+        _(file['processing_status']).must_equal 'pending'
+        
+        client_mock.verify
+      end
+
+      it 'skips retries when --skip-retries is used' do
+        # Create a file that previously failed
+        create_test_file(@db, { 
+          gdrive_id: 'failed-file', 
+          name: 'failed.pdf', 
+          url: 'https://example.com/failed.pdf',
+          processing_status: 'failed',
+          humata_import_response: { error: 'API error', attempts: 3 }.to_json
+        })
+
+        # Create mock HumataClient - should not be called
+        client_mock = Minitest::Mock.new
+        # No expectations set - should not be called
+
+        upload = Upload.new(database: @db_path)
+        upload.run(['--folder-id', @folder_id, '--skip-retries'], humata_client: client_mock)
+
+        # Verify the failed file was not retried
+        file = get_file_record('failed-file')
+        _(file['humata_id']).must_be_nil
+        _(file['processing_status']).must_equal 'failed'
+        
+        client_mock.verify
+      end
+
+      it 'distinguishes between new uploads and retries' do
+        # Create both new and failed files
+        create_test_file(@db, { gdrive_id: 'new-file', name: 'new.pdf', url: 'https://example.com/new.pdf' })
+        create_test_file(@db, { 
+          gdrive_id: 'failed-file', 
+          name: 'failed.pdf', 
+          url: 'https://example.com/failed.pdf',
+          processing_status: 'failed',
+          humata_import_response: { error: 'API error', attempts: 3 }.to_json
+        })
+
+        # Create mock HumataClient
+        client_mock = Minitest::Mock.new
+        client_mock.expect :upload_file, { 'id' => 'humata-new', 'status' => 'pending' }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'id' => 'humata-retry', 'status' => 'pending' }, [String, @folder_id]
+
+        upload = Upload.new(database: @db_path)
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
+
+        # Verify both files were processed
+        new_file = get_file_record('new-file')
+        failed_file = get_file_record('failed-file')
+        
+        _(new_file['humata_id']).must_equal 'humata-new'
+        _(failed_file['humata_id']).must_equal 'humata-retry'
+        _(new_file['processing_status']).must_equal 'pending'
+        _(failed_file['processing_status']).must_equal 'pending'
+        
+        client_mock.verify
+      end
     end
   end
 end 

@@ -33,6 +33,7 @@ module HumataImport
           opts.on('--format FORMAT', %w[text json csv], 'Output format (text/json/csv)') { |v| options[:format] = v }
           opts.on('--output FILE', String, 'Write output to file') { |v| options[:output] = v }
           opts.on('--filter STATUS', String, 'Filter by status (completed/failed/pending/processing)') { |v| options[:filter] = v }
+          opts.on('--failed-only', 'Show only failed uploads with retry information') { options[:failed_only] = true }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
@@ -49,9 +50,17 @@ module HumataImport
         SQL
 
         # Get detailed file information
-        query = "SELECT * FROM file_records"
-        query += " WHERE processing_status = ?" if options[:filter]
-        files = @db.execute(query, options[:filter] ? [options[:filter]] : [])
+        if options[:failed_only]
+          raw_files = @db.execute("SELECT * FROM file_records WHERE processing_status = 'failed'")
+        else
+          query = "SELECT * FROM file_records"
+          query += " WHERE processing_status = ?" if options[:filter]
+          raw_files = @db.execute(query, options[:filter] ? [options[:filter]] : [])
+        end
+        
+        # Convert array results to hashes using column names
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        files = raw_files.map { |file| columns.zip(file).to_h }
 
         case options[:format]
         when 'json'
@@ -59,7 +68,7 @@ module HumataImport
         when 'csv'
           output = generate_csv_report(files)
         else
-          output = generate_text_report(stats, files)
+          output = generate_text_report(stats, files, options)
         end
 
         if options[:output]
@@ -72,21 +81,31 @@ module HumataImport
 
       private
 
-      def generate_text_report(stats, files)
+      def generate_text_report(stats, files, options)
         report = StringIO.new
         report.puts "\nImport Session Status"
         report.puts "===================="
-        report.puts "\nOverall Progress:"
-        
-        total = stats.sum { |_, count| count }
-        stats.each do |status, count|
-          status_text = status || 'not started'
-          percentage = total > 0 ? (count.to_f / total * 100).round(1) : 0
-          report.puts "  #{status_text}: #{count} files (#{percentage}%)"
+        if options[:failed_only]
+          report.puts "\nFailed Uploads Summary:"
+          failed_count = files.size
+          report.puts "  Failed uploads: #{failed_count} files ready for retry"
+        else
+          report.puts "\nOverall Progress:"
+          
+          total = stats.sum { |_, count| count }
+          stats.each do |status, count|
+            status_text = status || 'not started'
+            percentage = total > 0 ? (count.to_f / total * 100).round(1) : 0
+            report.puts "  #{status_text}: #{count} files (#{percentage}%)"
+          end
         end
 
         if files.any?
-          report.puts "\nDetailed File Status:"
+          if options[:failed_only]
+            report.puts "\nFailed Uploads (Ready for Retry):"
+          else
+            report.puts "\nDetailed File Status:"
+          end
           report.puts "-" * 80
           files.each do |file|
             report.puts "#{file['name']} (#{file['gdrive_id']})"
@@ -97,6 +116,12 @@ module HumataImport
               import_response = JSON.parse(file['humata_import_response'])
               if import_response['error']
                 report.puts "  Import Error: #{import_response['error']}"
+              end
+              if import_response['attempts']
+                report.puts "  Attempts: #{import_response['attempts']}"
+              end
+              if import_response['last_attempt']
+                report.puts "  Last Attempt: #{import_response['last_attempt']}"
               end
             end
             
