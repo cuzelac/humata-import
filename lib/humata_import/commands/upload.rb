@@ -158,12 +158,13 @@ module HumataImport
                 humata_id = response.dig('data', 'pdf', 'id') || response['id']
                 
                 # Store response and update status
-                @db.execute(<<-SQL, [humata_id, 'pending', 'completed', response.to_json, file_data['gdrive_id']])
+                @db.execute(<<-SQL, [humata_id, 'pending', 'completed', response.to_json, Time.now.iso8601, file_data['gdrive_id']])
                   UPDATE file_records 
                   SET humata_id = ?,
                       processing_status = ?,
                       upload_status = ?,
-                      humata_import_response = ?
+                      humata_import_response = ?,
+                      uploaded_at = ?
                   WHERE gdrive_id = ?
                 SQL
 

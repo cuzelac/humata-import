@@ -95,6 +95,27 @@ module HumataImport
         _(file2['humata_id']).must_equal 'humata-2'
         _(file1['processing_status']).must_equal 'pending'
         _(file2['processing_status']).must_equal 'pending'
+        _(file1['uploaded_at']).wont_be_nil
+        _(file2['uploaded_at']).wont_be_nil
+        
+        client_mock.verify
+      end
+
+      it 'sets uploaded_at timestamp on successful upload' do
+        # Create test file
+        create_test_file(@db, { gdrive_id: 'file1', name: 'test1.pdf', url: 'https://example.com/file1.pdf' })
+
+        # Create mock HumataClient
+        client_mock = Minitest::Mock.new
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+
+        upload = Upload.new(database: @db_path)
+        upload.run(['--folder-id', @folder_id], humata_client: client_mock)
+
+        # Verify uploaded_at is set
+        file1 = get_file_record('file1')
+        _(file1['uploaded_at']).wont_be_nil
+        _(Time.parse(file1['uploaded_at'])).must_be_close_to Time.now, 5 # Within 5 seconds
         
         client_mock.verify
       end
@@ -119,6 +140,7 @@ module HumataImport
         file1 = get_file_record('file1')
         _(file1['humata_id']).must_equal 'humata-1'
         _(file1['processing_status']).must_equal 'pending'
+        _(file1['uploaded_at']).wont_be_nil
         
         client_mock.verify
       end
