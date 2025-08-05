@@ -26,7 +26,8 @@ module HumataImport
         options = {
           batch_size: 10,
           max_retries: 3,
-          retry_delay: 5
+          retry_delay: 5,
+          verbose: @options[:verbose]  # Start with global verbose setting
         }
 
         parser = OptionParser.new do |opts|
@@ -35,9 +36,13 @@ module HumataImport
           opts.on('--batch-size N', Integer, 'Number of files to process in parallel (default: 10)') { |v| options[:batch_size] = v }
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Seconds to wait between retries (default: 5)') { |v| options[:retry_delay] = v }
+          opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
+
+        # Update logger level based on verbose setting
+        @options[:verbose] = options[:verbose]
 
         unless options[:folder_id]
           puts parser

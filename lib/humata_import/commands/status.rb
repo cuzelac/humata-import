@@ -24,7 +24,8 @@ module HumataImport
         options = {
           format: 'text',
           output: nil,
-          filter: nil
+          filter: nil,
+          verbose: @options[:verbose]  # Start with global verbose setting
         }
 
         parser = OptionParser.new do |opts|
@@ -32,9 +33,13 @@ module HumataImport
           opts.on('--format FORMAT', %w[text json csv], 'Output format (text/json/csv)') { |v| options[:format] = v }
           opts.on('--output FILE', String, 'Write output to file') { |v| options[:output] = v }
           opts.on('--filter STATUS', String, 'Filter by status (completed/failed/pending/processing)') { |v| options[:filter] = v }
+          opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
+
+        # Update logger level based on verbose setting
+        @options[:verbose] = options[:verbose]
 
         # Get overall statistics
         stats = @db.execute(<<-SQL)

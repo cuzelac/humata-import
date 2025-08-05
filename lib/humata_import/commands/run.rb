@@ -28,7 +28,8 @@ module HumataImport
           max_retries: 3,
           retry_delay: 5,
           poll_interval: 10,
-          timeout: 1800
+          timeout: 1800,
+          verbose: @options[:verbose]  # Start with global verbose setting
         }
 
         parser = OptionParser.new do |opts|
@@ -49,6 +50,7 @@ module HumataImport
           opts.on('--poll-interval N', Integer, 'Seconds between status checks (default: 10)') { |v| options[:poll_interval] = v }
           opts.on('--timeout N', Integer, 'Verification timeout in seconds (default: 1800)') { |v| options[:timeout] = v }
           
+          opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
@@ -58,6 +60,9 @@ module HumataImport
           puts parser
           exit 1
         end
+
+        # Update logger level based on verbose setting
+        @options[:verbose] = options[:verbose]
 
         unless ENV['HUMATA_API_KEY']
           logger.error "HUMATA_API_KEY environment variable not set"
@@ -72,7 +77,6 @@ module HumataImport
         ]
         discover_args.concat(['--max-files', options[:max_files].to_s]) if options[:max_files]
         discover_args.concat(['--database', @options[:database]]) if @options[:database]
-        discover_args.concat(['--verbose']) if @options[:verbose]
 
         discover = Discover.new(@options)
         begin
@@ -91,7 +95,6 @@ module HumataImport
           '--retry-delay', options[:retry_delay].to_s
         ]
         upload_args.concat(['--database', @options[:database]]) if @options[:database]
-        upload_args.concat(['--verbose']) if @options[:verbose]
 
         upload = Upload.new(@options)
         begin
@@ -110,7 +113,6 @@ module HumataImport
           '--batch-size', options[:batch_size].to_s
         ]
         verify_args.concat(['--database', @options[:database]]) if @options[:database]
-        verify_args.concat(['--verbose']) if @options[:verbose]
 
         verify = Verify.new(@options)
         begin

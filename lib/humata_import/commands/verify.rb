@@ -25,7 +25,8 @@ module HumataImport
         options = {
           poll_interval: 10,  # seconds
           timeout: 1800,      # 30 minutes
-          batch_size: 10
+          batch_size: 10,
+          verbose: @options[:verbose]  # Start with global verbose setting
         }
 
         parser = OptionParser.new do |opts|
@@ -33,9 +34,13 @@ module HumataImport
           opts.on('--poll-interval N', Integer, 'Seconds between status checks (default: 10)') { |v| options[:poll_interval] = v }
           opts.on('--timeout N', Integer, 'Total timeout in seconds (default: 1800)') { |v| options[:timeout] = v }
           opts.on('--batch-size N', Integer, 'Number of files to check in parallel (default: 10)') { |v| options[:batch_size] = v }
+          opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
         end
         parser.order!(args)
+
+        # Update logger level based on verbose setting
+        @options[:verbose] = options[:verbose]
 
         # Use injected client or create default one
         client = humata_client
