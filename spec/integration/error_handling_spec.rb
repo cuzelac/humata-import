@@ -88,7 +88,6 @@ describe 'Error Handling Integration' do
     it 'handles API key errors' do
       # Create a simple mock client that doesn't make HTTP requests
       mock_client = Object.new
-      call_count = 0
       
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
@@ -113,7 +112,6 @@ describe 'Error Handling Integration' do
     it 'handles rate limiting with retries' do
       # Create a simple mock client
       mock_client = Object.new
-      call_count = 0
       
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
@@ -149,7 +147,6 @@ describe 'Error Handling Integration' do
     it 'handles network timeouts' do
       # Create a simple mock client
       mock_client = Object.new
-      call_count = 0
       
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
@@ -172,7 +169,6 @@ describe 'Error Handling Integration' do
     it 'handles invalid file errors' do
       # Create a simple mock client
       mock_client = Object.new
-      call_count = 0
       
       def mock_client.upload_file(url, folder_id)
         call_count = (@call_count || 0) + 1
@@ -199,42 +195,30 @@ describe 'Error Handling Integration' do
       # Try to use a database path that can't be created
       invalid_db = '/nonexistent/path/db.sqlite3'
       
-      # Mock Google Drive service to prevent real HTTP requests
-      service_mock = OpenStruct.new
-      service_mock.define_singleton_method(:list_files) do |params|
-        OpenStruct.new(
-          files: [],
-          next_page_token: nil
-        )
-      end
-
-      Google::Apis::DriveV3::DriveService.stub :new, service_mock do
-        Google::Auth.stub :get_application_default, OpenStruct.new do
-          discover = HumataImport::Commands::Discover.new(database: invalid_db)
-          _(-> { discover.run([gdrive_url]) }).must_raise SQLite3::CantOpenException
-        end
-      end
+      # The error should occur during command instantiation, not during run
+      _(-> { 
+        HumataImport::Commands::Discover.new(database: invalid_db)
+      }).must_raise SQLite3::CantOpenException
     end
 
     it 'handles database write errors' do
       # Create a database in a read-only location to simulate write errors
       read_only_db = '/tmp/readonly_test.db'
       
-      # Mock Google Drive service to prevent real HTTP requests
-      service_mock = OpenStruct.new
-      service_mock.define_singleton_method(:list_files) do |params|
-        OpenStruct.new(
-          files: [],
-          next_page_token: nil
-        )
-      end
-
-      Google::Apis::DriveV3::DriveService.stub :new, service_mock do
-        Google::Auth.stub :get_application_default, OpenStruct.new do
-          discover = HumataImport::Commands::Discover.new(database: read_only_db)
-          # This should fail when trying to write to a read-only location
-          _(-> { discover.run([gdrive_url]) }).must_raise SQLite3::CantOpenException
-        end
+      # Create the database file first
+      FileUtils.mkdir_p(File.dirname(read_only_db))
+      FileUtils.touch(read_only_db)
+      FileUtils.chmod(0444, read_only_db)  # Make it read-only
+      
+      begin
+        # The error should occur when trying to initialize schema (which requires write access)
+        _(-> { 
+          HumataImport::Database.initialize_schema(read_only_db)
+        }).must_raise SQLite3::ReadOnlyException
+      ensure
+        # Clean up
+        FileUtils.chmod(0644, read_only_db) if File.exist?(read_only_db)
+        FileUtils.rm_f(read_only_db)
       end
     end
   end
@@ -248,7 +232,6 @@ describe 'Error Handling Integration' do
     it 'handles parallel status checks safely' do
       # Create a simple mock client
       mock_client = Object.new
-      call_count = 0
       
       def mock_client.get_file_status(humata_id)
         call_count = (@call_count || 0) + 1

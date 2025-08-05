@@ -134,7 +134,7 @@ describe 'Full Workflow Integration' do
 
     # Upload should handle error
     upload = HumataImport::Commands::Upload.new(database: @db_path)
-    upload.run(['--folder-id', folder_id], humata_client: error_client)
+    upload.run(['--folder-id', folder_id, '--retry-delay', '0'], humata_client: error_client)
 
     files = @db.execute('SELECT * FROM file_records')
     _(files.first['processing_status']).must_equal 'failed'
