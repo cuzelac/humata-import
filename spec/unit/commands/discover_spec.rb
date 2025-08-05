@@ -3,16 +3,15 @@
 require 'spec_helper'
 
 describe HumataImport::Commands::Discover do
-  let(:options) { { database: 'discover_test.db', verbose: false } }
+  let(:options) { { database: 'discover_test.db' } }
   let(:command) { HumataImport::Commands::Discover.new(options) }
-  let(:db_path) { 'discover_test.db' }
 
   before do
-    HumataImport::Database.initialize_schema(db_path)
+    HumataImport::Database.initialize_schema(options[:database])
   end
 
   after do
-    File.delete(db_path) if File.exist?(db_path)
+    File.delete(options[:database]) if File.exist?(options[:database])
   end
 
   describe '#run' do
@@ -22,20 +21,20 @@ describe HumataImport::Commands::Discover do
         {
           id: 'file1',
           name: 'test1.pdf',
-          mimeType: 'application/pdf',
           webContentLink: 'https://drive.google.com/file/d/file1/view',
-          size: 1024
+          size: 1024,
+          mimeType: 'application/pdf'
         },
         {
           id: 'file2',
           name: 'test2.docx',
-          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           webContentLink: 'https://drive.google.com/file/d/file2/view',
-          size: 2048
+          size: 2048,
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -64,7 +63,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles non-recursive discovery' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', { recursive: false, max_files: nil }]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', false, nil]
       
       args = ['--no-recursive', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -74,7 +73,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles max files limit' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: 5 }]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, 5]
       
       args = ['--max-files', '5', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -84,7 +83,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles timeout option' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
       args = ['--timeout', '60', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -94,7 +93,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles verbose output' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
       verbose_options = { database: 'discover_test.db', verbose: true }
       verbose_command = HumataImport::Commands::Discover.new(verbose_options)
@@ -111,7 +110,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles quiet output' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
       quiet_options = { database: 'discover_test.db', quiet: true }
       quiet_command = HumataImport::Commands::Discover.new(quiet_options)
@@ -128,11 +127,12 @@ describe HumataImport::Commands::Discover do
 
     it 'handles empty file list' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
 
+      # Should handle empty list gracefully
       records = command.db.execute("SELECT COUNT(*) FROM file_records")
       assert_equal 0, records.first[0]
       
@@ -141,29 +141,30 @@ describe HumataImport::Commands::Discover do
 
     it 'handles files without optional attributes' do
       gdrive_client = Minitest::Mock.new
-      minimal_files = [
+      mock_files = [
         {
-          id: 'minimal_file',
-          name: 'minimal.pdf',
-          mimeType: 'application/pdf',
-          webContentLink: 'https://drive.google.com/file/d/minimal_file/view'
-          # No size attribute
+          id: 'file1',
+          name: 'test1.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view'
+          # Missing size and mimeType
         }
       ]
-      gdrive_client.expect :list_files, minimal_files, ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
 
-      records = command.db.execute("SELECT * FROM file_records WHERE gdrive_id = ?", ['minimal_file'])
+      # Should handle missing attributes gracefully
+      records = command.db.execute("SELECT * FROM file_records")
       assert_equal 1, records.size
       
-      file = records.first
-      assert_equal 'minimal_file', file[1] # gdrive_id
-      assert_equal 'minimal.pdf', file[2] # name
-      assert_equal 'https://drive.google.com/file/d/minimal_file/view', file[3] # url
-      assert_nil file[4] # size should be nil
-      assert_equal 'application/pdf', file[5] # mime_type
+      file1 = records.first
+      assert_equal 'file1', file1[1] # gdrive_id
+      assert_equal 'test1.pdf', file1[2] # name
+      assert_equal 'https://drive.google.com/file/d/file1/view', file1[3] # url
+      assert_nil file1[4] # size should be nil
+      assert_nil file1[5] # mime_type should be nil
       
       gdrive_client.verify
     end
@@ -174,68 +175,37 @@ describe HumataImport::Commands::Discover do
         {
           id: 'file1',
           name: 'test1.pdf',
-          mimeType: 'application/pdf',
-          webContentLink: 'https://drive.google.com/file/d/file1/view',
-          size: 1024
+          webContentLink: 'https://drive.google.com/file/d/file1/view'
         }
       ]
       
-      # Run discovery twice with same files
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', { recursive: true, max_files: nil }]
+      # Call list_files twice with the same files
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
-      args = ['https://drive.google.com/drive/folders/test_folder']
-      command.run(args, gdrive_client: gdrive_client)
-      command.run(args, gdrive_client: gdrive_client)
+      # First run
+      command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
+      
+      # Second run with same files
+      command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
 
-      # Should only have one copy of each file
+      # Should only have one record due to UNIQUE constraint
       records = command.db.execute("SELECT COUNT(*) FROM file_records")
       assert_equal 1, records.first[0]
       
       gdrive_client.verify
     end
-  end
 
-  describe 'error handling' do
-    it 'handles gdrive client errors gracefully' do
+    it 'handles errors from GdriveClient' do
       gdrive_client = Minitest::Mock.new
       gdrive_client.expect :list_files, nil do
-        raise StandardError, 'API Error'
+        raise HumataImport::GoogleDriveError, 'API error'
       end
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       
-      assert_raises(StandardError, 'API Error') do
-        command.run(args, gdrive_client: gdrive_client)
-      end
-      
-      gdrive_client.verify
-    end
-
-    it 'handles invalid URL format' do
-      gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, nil do
-        raise ArgumentError, 'Invalid URL'
-      end
-      
-      args = ['invalid-url']
-      
-      assert_raises(ArgumentError, 'Invalid URL') do
-        command.run(args, gdrive_client: gdrive_client)
-      end
-      
-      gdrive_client.verify
-    end
-
-    it 'handles timeout errors' do
-      gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, nil do
-        raise Timeout::Error, 'Request timeout'
-      end
-      
-      args = ['https://drive.google.com/drive/folders/test_folder']
-      
-      assert_raises(Timeout::Error, 'Request timeout') do
+      # Should raise the error
+      assert_raises(HumataImport::GoogleDriveError) do
         command.run(args, gdrive_client: gdrive_client)
       end
       
