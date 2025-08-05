@@ -145,28 +145,29 @@ module HumataImport
             
             if response.files
               response.files.each do |file|
-                # Skip folders if not recursive
-                next if !recursive && file.mime_type == 'application/vnd.google-apps.folder'
-                
-                # Add file to collection
-                files << {
-                  id: file.id,
-                  name: file.name,
-                  mimeType: file.mime_type,
-                  webContentLink: file.web_content_link,
-                  size: file.size
-                }
-                
-                # Check max files limit
-                if max_files && files.size >= max_files
-                  @logger.info "Reached max files limit (#{max_files})"
-                  return
-                end
-                
-                # Recursively crawl subfolders if enabled
-                if recursive && file.mime_type == 'application/vnd.google-apps.folder'
-                  crawl_folder(file.id, files, recursive, max_files)
-                  return if max_files && files.size >= max_files
+                if file.mime_type == 'application/vnd.google-apps.folder'
+                  # Handle folders
+                  if recursive
+                    # Recursively crawl subfolders if enabled
+                    crawl_folder(file.id, files, recursive, max_files)
+                    return if max_files && files.size >= max_files
+                  end
+                  # Skip folders if not recursive (they're not added to results)
+                else
+                  # Add files to collection
+                  files << {
+                    id: file.id,
+                    name: file.name,
+                    mimeType: file.mime_type,
+                    webContentLink: file.web_content_link,
+                    size: file.size
+                  }
+                  
+                  # Check max files limit
+                  if max_files && files.size >= max_files
+                    @logger.info "Reached max files limit (#{max_files})"
+                    return
+                  end
                 end
               end
             end

@@ -38,7 +38,7 @@ describe HumataImport::Clients::GdriveClient do
       ]
 
       invalid_urls.each do |url|
-        _(-> { client.send(:extract_folder_id, url) }).must_raise ArgumentError
+        _(-> { client.send(:extract_folder_id, url) }).must_raise HumataImport::ValidationError
       end
     end
   end
@@ -75,7 +75,7 @@ describe HumataImport::Clients::GdriveClient do
       _(files.size).must_equal 2
       _(files[0][:id]).must_equal 'file1'
       _(files[0][:name]).must_equal 'test.pdf'
-      _(files[0][:mime_type]).must_equal 'application/pdf'
+      _(files[0][:mimeType]).must_equal 'application/pdf'
       _(files[1][:id]).must_equal 'file2'
       _(files[1][:name]).must_equal 'test.docx'
     end
@@ -125,32 +125,54 @@ describe HumataImport::Clients::GdriveClient do
       client = HumataImport::Clients::GdriveClient.new(service: service_mock)
       files = client.list_files(folder_url, recursive: true)
 
+      # Should have 2 files: root.pdf and sub.pdf
+      # The subfolder itself is not included in the results
       _(files.size).must_equal 2
-      # Check that both files are present, regardless of order
       file_names = files.map { |f| f[:name] }.sort
       _(file_names).must_equal ['root.pdf', 'sub.pdf']
     end
 
     it 'skips subfolders when recursive is false' do
-      # Create mock service with folder structure
-      service_mock = OpenStruct.new
+      # Create simple mock classes
+      class MockFile
+        attr_reader :id, :name, :mime_type, :web_content_link, :size
+        
+        def initialize(id:, name:, mime_type:, web_content_link: nil, size: nil)
+          @id = id
+          @name = name
+          @mime_type = mime_type
+          @web_content_link = web_content_link
+          @size = size
+        end
+      end
+      
+      class MockResponse
+        attr_reader :files, :next_page_token
+        
+        def initialize(files:, next_page_token: nil)
+          @files = files
+          @next_page_token = next_page_token
+        end
+      end
+      
+      # Create mock service
+      service_mock = Object.new
       service_mock.define_singleton_method(:list_files) do |params|
-        OpenStruct.new(
+        MockResponse.new(
           files: [
-            OpenStruct.new(
+            MockFile.new(
               id: 'subfolder',
               name: 'Subfolder',
               mime_type: 'application/vnd.google-apps.folder'
             ),
-            OpenStruct.new(
+            MockFile.new(
               id: 'file1',
               name: 'root.pdf',
               mime_type: 'application/pdf',
               web_content_link: 'https://example.com/root.pdf',
               size: 1024
             )
-          ],
-          next_page_token: nil
+          ]
         )
       end
 
@@ -169,9 +191,11 @@ describe HumataImport::Clients::GdriveClient do
       end
 
       client = HumataImport::Clients::GdriveClient.new(service: service_mock)
-      files = client.list_files(folder_url)
-
-      _(files).must_equal []
+      
+      # Should raise the error instead of returning empty array
+      assert_raises(HumataImport::GoogleDriveError) do
+        client.list_files(folder_url)
+      end
     end
   end
 end
