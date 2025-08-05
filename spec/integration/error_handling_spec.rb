@@ -65,17 +65,20 @@ describe 'Error Handling Integration' do
     end
 
     it 'handles invalid folder URLs' do
-      discover = HumataImport::Commands::Discover.new(database: @db_path)
-      invalid_urls = [
-        'https://drive.google.com/drive/',
-        'https://example.com',
-        ''
-      ]
+      # Mock authentication to avoid RuntimeError from auth failure
+      Google::Auth.stub :get_application_default, OpenStruct.new do
+        discover = HumataImport::Commands::Discover.new(database: @db_path)
+        invalid_urls = [
+          'https://drive.google.com/drive/',
+          'https://example.com',
+          ''
+        ]
 
-      invalid_urls.each do |url|
-        _(-> { discover.run([url]) }).must_raise ArgumentError
-        files = @db.execute('SELECT * FROM file_records')
-        _(files).must_be_empty
+        invalid_urls.each do |url|
+          _(-> { discover.run([url]) }).must_raise ArgumentError
+          files = @db.execute('SELECT * FROM file_records')
+          _(files).must_be_empty
+        end
       end
     end
   end
