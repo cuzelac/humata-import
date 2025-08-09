@@ -95,7 +95,9 @@ describe HumataImport::Commands::Discover do
       gdrive_client = Minitest::Mock.new
       gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
-      verbose_options = { database: 'discover_test.db', verbose: true }
+      verbose_db = File.join(Dir.tmpdir, "discover_verbose_#{SecureRandom.hex(8)}.db")
+      HumataImport::Database.initialize_schema(verbose_db)
+      verbose_options = { database: verbose_db, verbose: true }
       verbose_command = HumataImport::Commands::Discover.new(verbose_options)
       args = ['https://drive.google.com/drive/folders/test_folder']
       
@@ -106,13 +108,17 @@ describe HumataImport::Commands::Discover do
       assert_equal 0, records.first[0]
       
       gdrive_client.verify
+    ensure
+      File.delete(verbose_db) if defined?(verbose_db) && File.exist?(verbose_db)
     end
 
     it 'handles quiet output' do
       gdrive_client = Minitest::Mock.new
       gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
       
-      quiet_options = { database: 'discover_test.db', quiet: true }
+      quiet_db = File.join(Dir.tmpdir, "discover_quiet_#{SecureRandom.hex(8)}.db")
+      HumataImport::Database.initialize_schema(quiet_db)
+      quiet_options = { database: quiet_db, quiet: true }
       quiet_command = HumataImport::Commands::Discover.new(quiet_options)
       args = ['https://drive.google.com/drive/folders/test_folder']
       
@@ -123,6 +129,8 @@ describe HumataImport::Commands::Discover do
       assert_equal 0, records.first[0]
       
       gdrive_client.verify
+    ensure
+      File.delete(quiet_db) if defined?(quiet_db) && File.exist?(quiet_db)
     end
 
     it 'handles empty file list' do
