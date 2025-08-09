@@ -9,7 +9,6 @@ describe 'Error Handling Integration' do
   let(:api_key) { 'test_api_key' }
 
   before do
-    WebMock.enable!
     ENV['HUMATA_API_KEY'] = api_key
     
     @db_path = File.expand_path('../../tmp/error_test.db', __dir__)
@@ -21,7 +20,6 @@ describe 'Error Handling Integration' do
   end
 
   after do
-    WebMock.disable!
     ENV.delete('HUMATA_API_KEY')
     FileUtils.rm_f(@db_path)
   end

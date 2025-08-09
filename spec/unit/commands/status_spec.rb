@@ -7,28 +7,8 @@ module HumataImport
     describe Status do
       def setup
         @db_path = File.join(Dir.tmpdir, "test_status_#{SecureRandom.hex(8)}.sqlite3")
+        HumataImport::Database.initialize_schema(@db_path)
         @db = SQLite3::Database.new(@db_path)
-        @db.execute(<<-SQL)
-          CREATE TABLE file_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            gdrive_id TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            url TEXT NOT NULL,
-            size INTEGER,
-            mime_type TEXT,
-            humata_folder_id TEXT,
-            humata_id TEXT,
-            upload_status TEXT DEFAULT 'pending',
-            processing_status TEXT,
-            last_error TEXT,
-            humata_verification_response TEXT,
-            humata_import_response TEXT,
-            discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            uploaded_at DATETIME,
-            completed_at DATETIME,
-            last_checked_at DATETIME
-          )
-        SQL
       end
 
       def teardown

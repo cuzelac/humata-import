@@ -3,7 +3,7 @@
 require 'spec_helper'
 
 describe HumataImport::Commands::Discover do
-  let(:options) { { database: 'discover_test.db' } }
+  let(:options) { { database: File.join(Dir.tmpdir, "discover_test_#{SecureRandom.hex(8)}.db") } }
   let(:command) { HumataImport::Commands::Discover.new(options) }
 
   before do

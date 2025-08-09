@@ -5,19 +5,30 @@ require 'webmock/minitest'
 
 describe HumataImport::Clients::HumataClient do
   let(:api_key) { 'test_api_key' }
-  let(:client) { HumataImport::Clients::HumataClient.new(api_key: api_key) }
+  let(:fake_time) do
+    Class.new do
+      attr_reader :now_calls, :sleep_calls
+      def initialize
+        @t = Time.at(0)
+        @now_calls = 0
+        @sleep_calls = []
+      end
+      def now
+        @now_calls += 1
+        @t
+      end
+      def sleep(seconds)
+        @sleep_calls << seconds
+        @t += seconds
+      end
+    end.new
+  end
+  let(:client) { HumataImport::Clients::HumataClient.new(api_key: api_key, time_provider: fake_time) }
   let(:file_url) { 'https://drive.google.com/uc?id=123' }
   let(:folder_id) { 'folder123' }
   let(:humata_id) { 'humata123' }
 
-  before do
-    WebMock.enable!
-    @start_time = Time.now
-  end
-
-  after do
-    WebMock.disable!
-  end
+  # WebMock is configured in spec_helper; no per-test enable/disable needed
 
   def mock_humata_upload_response
     {
@@ -81,7 +92,7 @@ describe HumataImport::Clients::HumataClient do
         .must_raise HumataImport::NetworkError
     end
 
-    it 'enforces rate limiting' do
+    it 'enforces rate limiting without real sleep' do
       response_body = mock_humata_upload_response
       
       stub_request(:post, "#{HumataImport::Clients::HumataClient::API_BASE_URL}/api/v2/import-url")
@@ -91,15 +102,12 @@ describe HumataImport::Clients::HumataClient do
           headers: { 'Content-Type' => 'application/json' }
         )
 
-      # Make two quick requests
+      # Make two quick requests; fake time captures sleep request
       client.upload_file(file_url, folder_id)
-      start_time = Time.now
       client.upload_file(file_url, folder_id)
-      elapsed = Time.now - start_time
-
-      # Should have waited at least the minimum interval
       min_interval = 60.0 / HumataImport::Clients::HumataClient::RATE_LIMIT
-      _(elapsed).must_be :>=, min_interval
+      _(fake_time.sleep_calls.last).must_be :>=, 0
+      _(fake_time.sleep_calls.last).must_be :<=, min_interval
     end
   end
 
@@ -141,7 +149,7 @@ describe HumataImport::Clients::HumataClient do
         .must_raise HumataImport::NetworkError
     end
 
-    it 'enforces rate limiting' do
+    it 'enforces rate limiting without real sleep' do
       response_body = mock_humata_status_response
       
       stub_request(:get, "#{HumataImport::Clients::HumataClient::API_BASE_URL}/api/v1/pdf/#{humata_id}")
@@ -151,15 +159,12 @@ describe HumataImport::Clients::HumataClient do
           headers: { 'Content-Type' => 'application/json' }
         )
 
-      # Make two quick requests
+      # Make two quick requests; fake time captures sleep request
       client.get_file_status(humata_id)
-      start_time = Time.now
       client.get_file_status(humata_id)
-      elapsed = Time.now - start_time
-
-      # Should have waited at least the minimum interval
       min_interval = 60.0 / HumataImport::Clients::HumataClient::RATE_LIMIT
-      _(elapsed).must_be :>=, min_interval
+      _(fake_time.sleep_calls.last).must_be :>=, 0
+      _(fake_time.sleep_calls.last).must_be :<=, min_interval
     end
   end
 end

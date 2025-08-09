@@ -41,15 +41,17 @@ module HumataImport
       #
       # @param api_key [String] The Humata API key
       # @param http_client [Net::HTTP, nil] Optional HTTP client for dependency injection
+      # @param time_provider [#now,#sleep, nil] Optional provider for time and sleep (testing seam)
       # @param base_url [String] Optional base URL for the API (defaults to API_BASE_URL)
       # @raise [HumataImport::ConfigurationError] If API key is missing or invalid
-      def initialize(api_key:, http_client: nil, base_url: API_BASE_URL)
+      def initialize(api_key:, http_client: nil, base_url: API_BASE_URL, time_provider: nil)
         raise HumataImport::ConfigurationError, 'API key is required' if api_key.nil? || api_key.empty?
         
         @api_key = api_key
         @logger = HumataImport::Logger.instance
         @http_client = http_client
         @base_url = base_url
+        @time_provider = time_provider || DefaultTimeProvider.new
         @last_request_time = nil
       end
 
@@ -129,7 +131,7 @@ module HumataImport
             # Use injected HTTP client
             @logger.debug "Making request to #{uri}"
             response = @http_client.request(request)
-            @last_request_time = Time.now
+            @last_request_time = @time_provider.now
             response
           else
             # Use default HTTP client
@@ -138,7 +140,7 @@ module HumataImport
 
             @logger.debug "Making request to #{uri}"
             response = http.request(request)
-            @last_request_time = Time.now
+            @last_request_time = @time_provider.now
 
             case response
             when Net::HTTPSuccess
@@ -179,12 +181,23 @@ module HumataImport
       def enforce_rate_limit
         return unless @last_request_time
         
-        elapsed = Time.now - @last_request_time
+        elapsed = @time_provider.now - @last_request_time
         min_interval = 60.0 / RATE_LIMIT
         
         if elapsed < min_interval
           sleep_time = min_interval - elapsed
-          sleep(sleep_time)
+          @time_provider.sleep(sleep_time)
+        end
+      end
+
+      # Default provider for time and sleep. Abstracted for testability.
+      class DefaultTimeProvider
+        def now
+          Time.now
+        end
+
+        def sleep(seconds)
+          Kernel.sleep(seconds)
         end
       end
     end
