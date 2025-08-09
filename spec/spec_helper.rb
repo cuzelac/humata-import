@@ -135,7 +135,7 @@ class Minitest::Spec
     FileUtils.touch(@temp_db_path)
     FileUtils.chmod(0666, @temp_db_path)
     @db = SQLite3::Database.new(@temp_db_path)
-    @db.results_as_hash = true
+    # Use default result row format (arrays) to avoid deprecated numeric indexing on hash rows
     HumataImport::Database.initialize_schema(@temp_db_path)
     ENV['HUMATA_DB_PATH'] = @temp_db_path
   end

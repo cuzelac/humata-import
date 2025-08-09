@@ -16,7 +16,7 @@ describe 'Error Handling Integration' do
     FileUtils.rm_f(@db_path)
     HumataImport::Database.initialize_schema(@db_path)
     @db = SQLite3::Database.new(@db_path)
-    @db.results_as_hash = true
+    # Keep default array rows to avoid sqlite3 deprecation warnings
   end
 
   after do

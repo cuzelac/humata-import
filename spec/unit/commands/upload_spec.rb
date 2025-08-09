@@ -22,7 +22,7 @@ module HumataImport
         # Reset the database before each test
         @db.execute('DELETE FROM file_records')
         # Ensure results are returned as hashes
-        @db.results_as_hash = true
+        # Keep default array rows to avoid sqlite3 deprecation warnings
       end
 
       it 'has basic setup' do
