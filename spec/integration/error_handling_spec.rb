@@ -255,7 +255,8 @@ describe 'Error Handling Integration' do
       # No database errors should occur
       files = @db.execute('SELECT * FROM file_records')
       _(files.size).must_equal 5
-      _(files.all? { |f| f['processing_status'] == 'completed' }).must_equal true
+      columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+      _(files.all? { |f| columns.zip(f).to_h['processing_status'] == 'completed' }).must_equal true
       _(mock_client.call_count).must_equal 5  # 5 files checked
     end
   end

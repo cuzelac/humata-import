@@ -58,7 +58,8 @@ module HumataImport
         files = @db.execute('SELECT * FROM file_records')
         _(files.size).must_equal 1
         
-        file = files.first
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        file = columns.zip(files.first).to_h
         _(file['humata_id']).must_equal 'humata-1'
         _(file['processing_status']).must_equal 'pending'
         _(file['uploaded_at']).wont_be_nil
