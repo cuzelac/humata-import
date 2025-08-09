@@ -16,6 +16,8 @@ Rake::TestTask.new(:test_verbose => :set_test_verbose) do |t|
   t.libs << 'spec'
   t.libs << 'lib'
   t.test_files = FileList['spec/**/*_spec.rb']
+  # Ensure Minitest runs in verbose mode (per-test names and timings)
+  t.options = '-v'
 end
 
 task default: :test
