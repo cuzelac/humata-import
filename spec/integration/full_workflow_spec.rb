@@ -163,9 +163,9 @@ describe 'Full Workflow Integration' do
       }
     end
 
-    # Phase 3: Verify
+    # Phase 3: Verify (reduce runtime by avoiding real sleeps)
     verify = HumataImport::Commands::Verify.new(database: @db_path)
-    verify.run(['--timeout', '5'], humata_client: verify_client)
+    verify.run(['--timeout', '1', '--poll-interval', '0'], humata_client: verify_client)
 
     # Verify final results
     files = get_all_files(@db)
