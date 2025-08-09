@@ -1,0 +1,97 @@
+## Dependency Injection for Testability and External API Isolation
+---
+title: Dependency Injection Rule
+description: Use dependency injection to simplify unit tests and prevent external API calls
+globs: *.rb
+alwaysApply: false
+---
+## Dependency Injection for Testability and External API Isolation
+
+### Description
+Establish a consistent practice of using Dependency Injection (DI) so that
+units under test are easy to isolate and unit tests never perform real
+external calls (network, databases, message queues, filesystem, time, or
+randomness). This rule reduces flakiness, speeds up tests, and improves
+design clarity by making dependencies explicit.
+
+### Rule
+- Inject all non-trivial dependencies into modules/classes/functions rather
+  than constructing them internally.
+- Do not make real external calls in unit tests. Provide fakes/mocks/stubs
+  via DI.
+- Treat the following as injectable boundaries: HTTP/SDK clients, database
+  connections, queues, filesystem, environment/config, clock/time, and
+  randomness.
+- Wire real implementations only in the application composition root
+  (bootstrap/main layer) or a DI container, never deep inside business logic.
+
+### Rationale
+- Explicit dependencies improve readability and maintainability.
+- Tests become fast, deterministic, and hermetic.
+- Reduces surprising side-effects and production-only bugs.
+
+### Implementation Guidelines
+- Prefer constructor injection for classes; parameter injection for
+  functions. Avoid hidden singletons and global state.
+- Define small, capability-focused interfaces/protocols for external
+  services. Implement real adapters in production and fakes in tests.
+- Centralize wiring in a composition root (e.g., server startup, CLI entry
+  point) or a DI container. Keep business logic free of `new` calls for
+  external resources.
+- For time and randomness, inject a `clock` and `random` provider.
+- For configuration, inject a typed config object instead of reading from
+  environment variables deep in the call graph.
+
+### Examples
+Correct (constructor injection):
+```
+class InvoiceService {
+  constructor(paymentGateway, clock) {
+    this.paymentGateway = paymentGateway
+    this.clock = clock
+  }
+
+  async charge(invoice) {
+    const now = this.clock.now()
+    return this.paymentGateway.charge(invoice, { capturedAt: now })
+  }
+}
+```
+
+Incorrect (instantiating dependencies internally):
+```
+class InvoiceService {
+  constructor() {
+    this.paymentGateway = new StripeClient(process.env.STRIPE_KEY)
+  }
+}
+```
+
+Test (using a fake):
+```
+const fakeGateway = { charge: async () => ({ id: "test_charge" }) }
+const fixedClock = { now: () => new Date("2020-01-01T00:00:00Z") }
+const svc = new InvoiceService(fakeGateway, fixedClock)
+// Assertions without network calls
+```
+
+### Enforcement
+- Code review must reject new code that constructs external clients or reads
+  environment variables inside business logic.
+- Unit tests must not perform network I/O, database I/O, or filesystem
+  writes. Use fakes/mocks/stubs via DI.
+
+### Exceptions
+- Trivial leaf functions with no external effects can skip DI.
+- Small scripts may inline dependencies if they have no tests and no reuse;
+  prefer DI when in doubt.
+
+### Benefits
+- Faster, reliable unit tests
+- Clearer seams between domain logic and infrastructure
+- Easier local development without credentials or network access
+
+### Notes
+- This rule complements `cursor-rules-location` and applies to all new and
+  modified code where external interactions may occur.
+
