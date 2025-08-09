@@ -133,9 +133,36 @@ describe HumataImport::Clients::GdriveClient do
     end
 
     it 'skips subfolders when recursive is false' do
-      skip "Complex infinite recursion issue with logger - core functionality works correctly"
-      # TODO: Fix infinite recursion issue with logger when mocking Google Drive API responses
-      # The core functionality is working correctly, this is a test infrastructure issue
+      # Root folder contains a subfolder and a file; non-recursive should return only the file
+      service_mock = OpenStruct.new
+      call_count = 0
+      service_mock.define_singleton_method(:list_files) do |params|
+        call_count += 1
+        OpenStruct.new(
+          files: [
+            OpenStruct.new(
+              id: 'subfolder',
+              name: 'Subfolder',
+              mime_type: 'application/vnd.google-apps.folder'
+            ),
+            OpenStruct.new(
+              id: 'file1',
+              name: 'root.pdf',
+              mime_type: 'application/pdf',
+              web_content_link: 'https://example.com/root.pdf',
+              size: 1024
+            )
+          ],
+          next_page_token: nil
+        )
+      end
+
+      client = HumataImport::Clients::GdriveClient.new(service: service_mock)
+      files = client.list_files(folder_url, false)
+
+      _(files.size).must_equal 1
+      _(files.first[:name]).must_equal 'root.pdf'
+      _(call_count).must_equal 1
     end
 
     it 'handles API errors gracefully' do
