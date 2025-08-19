@@ -17,6 +17,8 @@ module HumataImport
       
       def initialize(options)
         @options = options
+        # Initialize the database schema before connecting to ensure tables exist
+        HumataImport::Database.initialize_schema(options[:database])
         @db = HumataImport::Database.connect(options[:database])
         # Configure the singleton logger with the options
         HumataImport::Logger.instance.configure(options)
