@@ -10,7 +10,7 @@
 #   - optparse (stdlib)
 #   - HumataImport::Clients::HumataClient
 #   - HumataImport::FileRecord
-#   - HumataImport::Utils::UrlConverter
+#   - HumataImport::Utils::UrlBuilder
 #
 # Configuration:
 #   - Requires HUMATA_API_KEY environment variable
@@ -247,7 +247,7 @@ module HumataImport
         
         begin
           # Optimize URL for Humata
-          optimized_url = HumataImport::Utils::UrlConverter.optimize_for_humata(url)
+          optimized_url = HumataImport::Utils::UrlBuilder.optimize_for_humata(url)
           
           # Upload to Humata
           response = client.upload_file(optimized_url, options[:folder_id])

@@ -13,6 +13,7 @@ require_relative 'humata_import/commands/run'
 require_relative 'humata_import/commands/status'
 require_relative 'humata_import/commands/upload'
 require_relative 'humata_import/commands/verify'
+require_relative 'humata_import/utils/url_builder'
 
 module HumataImport
   VERSION = "0.1.0"
