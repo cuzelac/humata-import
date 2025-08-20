@@ -1,0 +1,70 @@
+# Test Execution Rule
+
+## Description
+This rule ensures that all tests are executed using the `rake` command and provides guidelines for running individual test files.
+
+## Rule
+When executing tests in this project:
+1. **MUST** use `rake` to run the full test suite
+2. **MUST** use `rake test TEST=PATH_TO_TEST` to run individual test files
+3. **MUST NOT** use direct test runner commands (e.g., `ruby -Itest`, `minitest`)
+4. **MUST** ensure the test environment is properly configured before running tests
+
+## Implementation
+The development team will enforce this rule by:
+- Using `rake` as the primary test execution command
+- Specifying individual test files with the `TEST` parameter
+- Maintaining consistent test execution patterns across the project
+- Documenting any special test execution requirements
+
+## Benefits
+- Consistent test execution across all environments
+- Proper test environment setup and teardown
+- Integration with project build and CI/CD processes
+- Simplified test execution for developers
+
+## Examples
+
+✅ Correct test execution:
+```bash
+# Run full test suite
+rake
+
+# Run specific test file
+rake test TEST=test/models/user_test.rb
+
+# Run tests in specific directory
+rake test TEST=test/models/
+
+# Run tests matching pattern
+rake test TEST=test/**/*_test.rb
+```
+
+❌ Incorrect test execution:
+```bash
+# Direct test runner (not allowed)
+ruby -Itest test/models/user_test.rb
+
+# Minitest direct execution (not allowed)
+minitest test/models/user_test.rb
+
+# Ruby test execution (not allowed)
+ruby test/models/user_test.rb
+```
+
+## Additional Requirements
+- Always run `rake` from the project root directory
+- Ensure all dependencies are installed before running tests
+- Use appropriate test environment variables if needed
+- Follow project-specific test configuration requirements
+
+## Integration
+This rule works in conjunction with:
+- Ruby testing standards
+- Project build configuration
+- CI/CD pipeline setup
+- Development environment requirements
+description:
+globs:
+alwaysApply: false
+---
