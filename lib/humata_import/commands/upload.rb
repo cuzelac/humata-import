@@ -26,7 +26,6 @@ require 'optparse'
 require_relative 'base'
 require_relative '../clients/humata_client'
 require_relative '../models/file_record'
-require_relative '../utils/url_converter'
 require 'logger'
 
 module HumataImport
