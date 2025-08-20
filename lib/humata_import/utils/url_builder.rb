@@ -9,22 +9,27 @@ module HumataImport
       # Default domain for building Humata submission URLs
       DEFAULT_DOMAIN = 'https://gdrive-resource.cuzelac.workers.dev'
 
-      # Builds a URL for Humata submission in the format: DOMAIN/FILE_ID/FILE_NAME
+      # Builds a URL for Humata submission in the format: DOMAIN/FILE_ID/ENCODED_MIME_TYPE/FILE_NAME
       #
       # @param file_id [String] The file ID (e.g., Google Drive file ID)
       # @param file_name [String] The file name
+      # @param mime_type [String] The MIME type of the file
       # @param domain [String] The domain to use (defaults to DEFAULT_DOMAIN)
       # @return [String] The built URL for Humata submission
-      def self.build_humata_url(file_id, file_name, domain: DEFAULT_DOMAIN)
+      def self.build_humata_url(file_id, file_name, mime_type, domain: DEFAULT_DOMAIN)
         raise ArgumentError, 'file_id cannot be nil or empty' if file_id.nil? || file_id.empty?
         raise ArgumentError, 'file_name cannot be nil or empty' if file_name.nil? || file_name.empty?
+        raise ArgumentError, 'mime_type cannot be nil or empty' if mime_type.nil? || mime_type.empty?
         raise ArgumentError, 'domain cannot be nil or empty' if domain.nil? || domain.empty?
 
         # Ensure domain doesn't end with slash
         clean_domain = domain.chomp('/')
         
-        # Build URL in format: DOMAIN/FILE_ID/FILE_NAME
-        "#{clean_domain}/#{file_id}/#{file_name}"
+        # Encode MIME type by replacing '/' with '_'
+        encoded_mime_type = mime_type.gsub('/', '_')
+        
+        # Build URL in format: DOMAIN/FILE_ID/ENCODED_MIME_TYPE/FILE_NAME
+        "#{clean_domain}/#{file_id}/#{encoded_mime_type}/#{file_name}"
       end
 
       # Converts various Google Drive URL formats to direct file view URLs

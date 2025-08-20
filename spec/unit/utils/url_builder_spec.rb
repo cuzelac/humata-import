@@ -7,59 +7,72 @@ module HumataImport
     describe UrlBuilder do
       describe '.build_humata_url' do
         it 'builds URLs in the correct format' do
-          url = UrlBuilder.build_humata_url('abc123', 'document.pdf')
-          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/document.pdf'
+          url = UrlBuilder.build_humata_url('abc123', 'document.pdf', 'application/pdf')
+          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/application_pdf/document.pdf'
         end
 
         it 'uses default domain when none specified' do
-          url = UrlBuilder.build_humata_url('def456', 'spreadsheet.xlsx')
-          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/def456/spreadsheet.xlsx'
+          url = UrlBuilder.build_humata_url('def456', 'spreadsheet.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/def456/application_vnd.openxmlformats-officedocument.spreadsheetml.sheet/spreadsheet.xlsx'
         end
 
         it 'allows custom domain' do
           custom_domain = 'https://custom.example.com'
-          url = UrlBuilder.build_humata_url('ghi789', 'presentation.pptx', domain: custom_domain)
-          _(url).must_equal 'https://custom.example.com/ghi789/presentation.pptx'
+          url = UrlBuilder.build_humata_url('ghi789', 'presentation.pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', domain: custom_domain)
+          _(url).must_equal 'https://custom.example.com/ghi789/application_vnd.openxmlformats-officedocument.presentationml.presentation/presentation.pptx'
         end
 
         it 'handles domains with trailing slashes' do
           domain_with_slash = 'https://example.com/'
-          url = UrlBuilder.build_humata_url('jkl012', 'file.txt', domain: domain_with_slash)
-          _(url).must_equal 'https://example.com/jkl012/file.txt'
+          url = UrlBuilder.build_humata_url('jkl012', 'file.txt', 'text/plain', domain: domain_with_slash)
+          _(url).must_equal 'https://example.com/jkl012/text_plain/file.txt'
+        end
+
+        it 'encodes MIME types by replacing / with _' do
+          url = UrlBuilder.build_humata_url('abc123', 'image.png', 'image/png')
+          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/image_png/image.png'
         end
 
         it 'raises error for nil file_id' do
-          _{ UrlBuilder.build_humata_url(nil, 'file.pdf') }.must_raise ArgumentError
+          _{ UrlBuilder.build_humata_url(nil, 'file.pdf', 'application/pdf') }.must_raise ArgumentError
         end
 
         it 'raises error for empty file_id' do
-          _{ UrlBuilder.build_humata_url('', 'file.pdf') }.must_raise ArgumentError
+          _{ UrlBuilder.build_humata_url('', 'file.pdf', 'application/pdf') }.must_raise ArgumentError
         end
 
         it 'raises error for nil file_name' do
-          _{ UrlBuilder.build_humata_url('abc123', nil) }.must_raise ArgumentError
+          _{ UrlBuilder.build_humata_url('abc123', nil, 'application/pdf') }.must_raise ArgumentError
         end
 
         it 'raises error for empty file_name' do
-          _{ UrlBuilder.build_humata_url('abc123', '') }.must_raise ArgumentError
+          _{ UrlBuilder.build_humata_url('abc123', '', 'application/pdf') }.must_raise ArgumentError
+        end
+
+        it 'raises error for nil mime_type' do
+          _{ UrlBuilder.build_humata_url('abc123', 'file.pdf', nil) }.must_raise ArgumentError
+        end
+
+        it 'raises error for empty mime_type' do
+          _{ UrlBuilder.build_humata_url('abc123', 'file.pdf', '') }.must_raise ArgumentError
         end
 
         it 'raises error for nil domain' do
-          _{ UrlBuilder.build_humata_url('abc123', 'file.pdf', domain: nil) }.must_raise ArgumentError
+          _{ UrlBuilder.build_humata_url('abc123', 'file.pdf', 'application/pdf', domain: nil) }.must_raise ArgumentError
         end
 
         it 'raises error for empty domain' do
-          _{ UrlBuilder.build_humata_url('abc123', 'file.pdf', domain: '') }.must_raise ArgumentError
+          _{ UrlBuilder.build_humata_url('abc123', 'file.pdf', 'application/pdf', domain: '') }.must_raise ArgumentError
         end
 
         it 'handles special characters in file names' do
-          url = UrlBuilder.build_humata_url('abc123', 'file with spaces & symbols.pdf')
-          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/file with spaces & symbols.pdf'
+          url = UrlBuilder.build_humata_url('abc123', 'file with spaces & symbols.pdf', 'application/pdf')
+          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/application_pdf/file with spaces & symbols.pdf'
         end
 
         it 'handles file names with dots' do
-          url = UrlBuilder.build_humata_url('abc123', 'backup.2024.01.01.pdf')
-          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/backup.2024.01.01.pdf'
+          url = UrlBuilder.build_humata_url('abc123', 'backup.2024.01.01.pdf', 'application/pdf')
+          _(url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/application_pdf/backup.2024.01.01.pdf'
         end
       end
 
@@ -161,8 +174,8 @@ module HumataImport
       describe 'integration' do
         it 'can build Humata URLs and optimize Google Drive URLs' do
           # Build a Humata URL
-          humata_url = UrlBuilder.build_humata_url('abc123', 'document.pdf')
-          _(humata_url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/document.pdf'
+          humata_url = UrlBuilder.build_humata_url('abc123', 'document.pdf', 'application/pdf')
+          _(humata_url).must_equal 'https://gdrive-resource.cuzelac.workers.dev/abc123/application_pdf/document.pdf'
           
           # Optimize a Google Drive URL
           gdrive_url = 'https://drive.google.com/file/d/def456/view?usp=sharing'

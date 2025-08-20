@@ -240,12 +240,13 @@ module HumataImport
         
         gdrive_id = file_hash['gdrive_id']
         name = file_hash['name']
+        mime_type = file_hash['mime_type']
         
-        logger.info "Uploading: #{name} (#{gdrive_id})"
+        logger.info "Uploading: #{name} (#{gdrive_id}) - MIME: #{mime_type}"
         
         begin
-          # Build Humata submission URL in format: DOMAIN/FILE_ID/FILE_NAME
-          humata_url = HumataImport::Utils::UrlBuilder.build_humata_url(gdrive_id, name)
+          # Build Humata submission URL in format: DOMAIN/FILE_ID/ENCODED_MIME_TYPE/FILE_NAME
+          humata_url = HumataImport::Utils::UrlBuilder.build_humata_url(gdrive_id, name, mime_type)
           
           # Upload to Humata
           response = client.upload_file(humata_url, options[:folder_id])
