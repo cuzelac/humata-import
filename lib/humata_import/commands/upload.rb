@@ -241,16 +241,15 @@ module HumataImport
         
         gdrive_id = file_hash['gdrive_id']
         name = file_hash['name']
-        url = file_hash['url']
         
         logger.info "Uploading: #{name} (#{gdrive_id})"
         
         begin
-          # Optimize URL for Humata
-          optimized_url = HumataImport::Utils::UrlBuilder.optimize_for_humata(url)
+          # Build Humata submission URL in format: DOMAIN/FILE_ID/FILE_NAME
+          humata_url = HumataImport::Utils::UrlBuilder.build_humata_url(gdrive_id, name)
           
           # Upload to Humata
-          response = client.upload_file(optimized_url, options[:folder_id])
+          response = client.upload_file(humata_url, options[:folder_id])
           
           # Store response and update status
           humata_id = response.dig('data', 'pdf', 'id')
