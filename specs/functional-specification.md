@@ -24,6 +24,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - **Robust error handling** with automatic retry mechanisms
 - **Flexible CLI interface** supporting individual phases or complete workflows
 - **Detailed progress tracking** and reporting capabilities
+- **Resumable operations** with automatic recovery from interruptions
 
 ### 1.3 Target Users
 - **Content Managers**: Bulk import document collections for analysis
@@ -161,6 +162,13 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - **Rate Limiting**: Built-in rate limiting (120 requests/minute)
 - **Network Failures**: Retry with configurable limits
 - **Invalid URLs**: URL optimization to reduce 500 errors
+
+#### 3.3.4 Interruption Handling
+- **Signal Trapping**: Graceful shutdown on SIGINT/SIGTERM
+- **Progress Checkpointing**: Save upload state before termination
+- **Current File Completion**: Allow current file upload to complete
+- **Database Consistency**: Ensure partial uploads are properly marked
+- **Recovery Instructions**: Provide clear guidance for resuming operations
 
 ### 3.4 Verify Command (`lib/humata_import/commands/verify.rb`)
 - **Purpose**: Phase 3 - Verify processing status of uploaded files
@@ -367,18 +375,65 @@ export TEST_ENV="true"  # Skip authentication in tests
 - **Transient Errors**: Network timeouts, rate limits, temporary API failures
 - **Permanent Errors**: Invalid URLs, access denied, unsupported file types
 - **System Errors**: Database corruption, disk space issues
+- **Interruption Errors**: Process termination, signal interrupts (SIGINT/SIGTERM)
 
 ### 8.2 Recovery Mechanisms
 - **Idempotent Operations**: All phases can be safely re-run
 - **State Preservation**: Complete error details stored in database
 - **Selective Processing**: Only unprocessed files handled on re-run
 - **Graceful Degradation**: Continue processing despite individual failures
+- **Interruption Recovery**: Automatic resumption from last known state
+- **Database Consistency**: Transaction-based operations ensure data integrity
 
 ### 8.3 Retry Logic
 - **Upload Retries**: Configurable retry attempts with exponential backoff
 - **Status Polling**: Continuous polling until completion or timeout
 - **Rate Limiting**: Automatic throttling to respect API limits
 - **Network Resilience**: Handle temporary network issues
+
+### 8.4 Interruption Handling
+- **Signal Trapping**: Graceful shutdown on SIGINT/SIGTERM signals
+- **Progress Checkpointing**: Save partial upload state before termination
+- **Resource Cleanup**: Proper cleanup of database connections and file handles
+- **User Feedback**: Clear indication of interruption and recovery instructions
+- **Transaction Safety**: Ensure database operations complete or rollback cleanly
+
+## 8.5 Signal Handling and Process Management
+
+### 8.5.1 Current Implementation
+The current implementation does not include explicit signal handling for process interruptions:
+- **No Signal Trapping**: No `Signal.trap` calls for SIGINT/SIGTERM
+- **Immediate Termination**: Ctrl-C causes immediate process termination
+- **No Cleanup**: No graceful shutdown or resource cleanup
+- **State Preservation**: Database state remains consistent due to transaction-based operations
+
+### 8.5.2 Recommended Improvements
+To enhance the robustness of the application, the following improvements are recommended:
+
+#### Signal Handling
+- **SIGINT (Ctrl-C)**: Graceful shutdown with progress checkpointing
+- **SIGTERM**: Clean termination with resource cleanup
+- **SIGUSR1**: Graceful pause/resume capability for maintenance
+
+#### Graceful Shutdown Process
+1. **Stop Accepting New Work**: Cease processing new files immediately
+2. **Complete Current Operations**: Allow current file uploads to complete
+3. **Save Progress State**: Update database with current progress
+4. **Cleanup Resources**: Close database connections and file handles
+5. **User Feedback**: Provide clear status and recovery instructions
+
+#### Implementation Considerations
+- **Transaction Management**: Use database transactions to ensure atomicity
+- **Progress Checkpointing**: Save partial upload state at regular intervals
+- **Resource Cleanup**: Implement proper cleanup in `ensure` blocks
+- **User Experience**: Clear messaging about interruption and recovery
+
+### 8.5.3 Benefits of Enhanced Signal Handling
+- **Improved User Experience**: Clear feedback during interruptions
+- **Data Consistency**: Better database state management
+- **Resource Management**: Proper cleanup of system resources
+- **Production Readiness**: More suitable for enterprise environments
+- **Debugging Support**: Better visibility into interruption scenarios
 
 ## 9. Performance Characteristics
 
@@ -472,18 +527,23 @@ rake install
 - **Advanced Filtering**: File type and size-based filtering
 - **Scheduled Operations**: Automated recurring imports
 - **Multi-Provider Support**: Support for other cloud storage providers
+- **Enhanced Interruption Handling**: Improved signal handling and graceful shutdown
+- **Progress Persistence**: Save and restore upload progress across sessions
+- **Resume Points**: User-configurable checkpoint intervals for long-running operations
 
 ### 13.2 Scalability Improvements
 - **Distributed Processing**: Multi-node processing capabilities
 - **Queue-Based Architecture**: Message queue for high-volume processing
 - **Database Scaling**: Support for larger databases and concurrent sessions
 - **API Optimization**: Enhanced rate limiting and batching strategies
+- **Fault Tolerance**: Improved handling of process interruptions and system failures
+- **State Management**: Enhanced transaction management and rollback capabilities
 
 ## 14. Conclusion
 
 The Humata.ai Google Drive Import Tool provides a robust, scalable solution for bulk document ingestion from Google Drive into Humata.ai. The 3-phase workflow with comprehensive state management ensures reliable processing of large document collections, while the modular architecture supports both automated workflows and manual intervention as needed.
 
-The tool's focus on error handling, progress tracking, and user experience makes it suitable for production use in enterprise environments, while the comprehensive documentation and testing ensure maintainability and reliability.
+The tool's focus on error handling, progress tracking, and user experience makes it suitable for production use in enterprise environments, while the comprehensive documentation and testing ensure maintainability and reliability. The current design prioritizes resumability and data consistency over graceful interruption handling, which means the system can recover from interruptions but may not provide optimal user experience during process termination.
 
 ---
 
