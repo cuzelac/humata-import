@@ -150,7 +150,17 @@ class Minitest::Spec
   # Reset the database before each test
   def before_each
     super
-    @db.execute('DELETE FROM file_records')
+    # Close the current connection
+    @db.close
+    
+    # Remove the database file completely
+    File.unlink(@temp_db_path) if File.exist?(@temp_db_path)
+    
+    # Recreate the database file and schema
+    FileUtils.touch(@temp_db_path)
+    FileUtils.chmod(0666, @temp_db_path)
+    @db = SQLite3::Database.new(@temp_db_path)
+    HumataImport::Database.initialize_schema(@temp_db_path)
   end
 end
 
