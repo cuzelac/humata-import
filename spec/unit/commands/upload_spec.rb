@@ -511,6 +511,180 @@ module HumataImport
         # Should return the same mock client (same object reference)
         _(thread_client.object_id).must_equal client_mock.object_id
       end
+
+      it 'clears last_error field on successful upload after retry' do
+        # Create test file with an existing error in the database
+        file_attrs = {
+          name: 'retry_test.webp',
+          url: 'https://example.com/retry_test.webp',
+          mime_type: 'image/webp',
+          upload_status: 'failed',
+          last_error: 'Unexpected error: API request failed: HTTP 405: Method Not Allowed'
+        }
+        create_test_file(@db, file_attrs)
+
+        # Verify the file has the error initially
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 1
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        initial_file = columns.zip(files.first).to_h
+        _(initial_file['upload_status']).must_equal 'failed'
+        _(initial_file['last_error']).must_equal 'Unexpected error: API request failed: HTTP 405: Method Not Allowed'
+        _(initial_file['humata_id']).must_be_nil
+
+        # Create mock client that fails once then succeeds
+        client_mock = Object.new
+        
+        def client_mock.upload_file(url, folder_id)
+          @call_count ||= 0
+          @call_count += 1
+          case @call_count
+          when 1
+            # First call fails with 405 error (simulating the transient issue)
+            # Use TransientError to trigger retry logic
+            raise HumataImport::TransientError, 'API request failed: HTTP 405: Method Not Allowed'
+          else
+            # Second call succeeds
+            { 'data' => { 'pdf' => { 'id' => 'humata-success-123' } } }
+          end
+        end
+        
+        def client_mock.verify
+          # Mock verification - no-op for this test
+        end
+
+        upload = Upload.new({ database: @temp_db_path })
+        
+        # Mock sleep to speed up test
+        upload.stub :sleep, nil do
+          upload.run(['--folder-id', @folder_id, '--max-retries', '3', '--retry-delay', '1', '--threads', '1'], humata_client: client_mock)
+        end
+
+        # Verify file was eventually uploaded successfully and last_error was cleared
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 1
+        
+        final_file = columns.zip(files.first).to_h
+        _(final_file['upload_status']).must_equal 'completed'
+        _(final_file['humata_id']).must_equal 'humata-success-123'
+        _(final_file['last_error']).must_be_nil # This is the key assertion - error should be cleared
+        _(final_file['processing_status']).must_equal 'pending'
+        _(final_file['uploaded_at']).wont_be_nil
+        
+        # Verify the response was stored
+        _(final_file['humata_import_response']).wont_be_nil
+        response_data = JSON.parse(final_file['humata_import_response'])
+        _(response_data['data']['pdf']['id']).must_equal 'humata-success-123'
+        
+        client_mock.verify
+      end
+
+      it 'clears last_error field on successful upload after multiple retries with different errors' do
+        # Create test file with an existing error
+        file_attrs = {
+          name: 'multi_retry_test.pdf',
+          url: 'https://example.com/multi_retry_test.pdf',
+          mime_type: 'application/pdf',
+          upload_status: 'failed',
+          last_error: 'Previous failure: Network timeout'
+        }
+        create_test_file(@db, file_attrs)
+
+        # Create mock client that fails with different errors then succeeds
+        client_mock = Object.new
+        
+        def client_mock.upload_file(url, folder_id)
+          @call_count ||= 0
+          @call_count += 1
+          case @call_count
+          when 1
+            # First retry fails with 405 error (treat as transient for this test)
+            raise HumataImport::TransientError, 'API request failed: HTTP 405: Method Not Allowed'
+          when 2
+            # Second retry fails with rate limit error
+            raise HumataImport::TransientError, 'Rate limit exceeded: HTTP 429'
+          when 3
+            # Third retry fails with server error
+            raise HumataImport::TransientError, 'Server error: HTTP 502'
+          else
+            # Fourth retry succeeds
+            { 'data' => { 'pdf' => { 'id' => 'humata-final-success' } } }
+          end
+        end
+        
+        def client_mock.verify
+          # Mock verification - no-op for this test
+        end
+
+        upload = Upload.new({ database: @temp_db_path })
+        
+        # Mock sleep to speed up test
+        upload.stub :sleep, nil do
+          upload.run(['--folder-id', @folder_id, '--max-retries', '5', '--retry-delay', '1', '--threads', '1'], humata_client: client_mock)
+        end
+
+        # Verify file was eventually uploaded successfully and last_error was cleared
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 1
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        final_file = columns.zip(files.first).to_h
+        
+        # Key assertions: successful upload with cleared error
+        _(final_file['upload_status']).must_equal 'completed'
+        _(final_file['humata_id']).must_equal 'humata-final-success'
+        _(final_file['last_error']).must_be_nil # Error should be cleared despite multiple failures
+        _(final_file['processing_status']).must_equal 'pending'
+        _(final_file['uploaded_at']).wont_be_nil
+        
+        client_mock.verify
+      end
+
+      it 'preserves last_error field when upload fails after retries' do
+        # Create test file
+        file_attrs = {
+          name: 'permanent_fail_test.pdf',
+          url: 'https://example.com/permanent_fail_test.pdf',
+          mime_type: 'application/pdf'
+        }
+        create_test_file(@db, file_attrs)
+
+        # Create mock client that always fails
+        client_mock = Object.new
+        
+        def client_mock.upload_file(url, folder_id)
+          # Always fail with 405 error (use HumataError since this should not retry)
+          raise HumataImport::HumataError, 'API request failed: HTTP 405: Method Not Allowed'
+        end
+        
+        def client_mock.verify
+          # Mock verification - no-op for this test
+        end
+
+        upload = Upload.new({ database: @temp_db_path })
+        
+        # Mock sleep to speed up test
+        upload.stub :sleep, nil do
+          upload.run(['--folder-id', @folder_id, '--max-retries', '2', '--retry-delay', '1', '--threads', '1'], humata_client: client_mock)
+        end
+
+        # Verify file failed and error is preserved
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 1
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        final_file = columns.zip(files.first).to_h
+        
+        # Assertions: failed upload with preserved error
+        _(final_file['upload_status']).must_equal 'failed'
+        _(final_file['humata_id']).must_be_nil
+        _(final_file['last_error']).must_equal 'API request failed: HTTP 405: Method Not Allowed'
+        _(final_file['processing_status']).must_equal 'failed'
+        _(final_file['uploaded_at']).must_be_nil
+        
+        client_mock.verify
+      end
     end
   end
 end 
