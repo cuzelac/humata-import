@@ -40,12 +40,15 @@ When writing tests for Ruby code:
    - Use WebMock for HTTP request mocking
    - Mock non-essential dependencies (notifiers, external services, etc.) to focus tests on core functionality
    - Avoid testing infrastructure concerns unless they're part of the core business logic
+   - **CRITICAL**: Always provide mock clients for commands that make external calls (e.g., `humata_client:` parameter)
+   - **CRITICAL**: Always stub sleep calls in retry-related tests to prevent timeouts
 
 6. **Test Data and Helpers**
    - Use `TestHelpers` module for common test utilities
    - Create test data using helper methods like `create_test_file`
    - Use `SecureRandom` for generating unique test data
-   - Clean up test data in `after_each` or `after_all`
+   - Clean up test data in `setup`/`teardown` methods (not `before_each`/`after_each`)
+   - **CRITICAL**: Use proper test lifecycle methods to ensure test isolation
 
 ## Testing Core Functionality
 
@@ -122,3 +125,7 @@ end
 - minitest/mock for mocking
 - minitest/hooks for lifecycle methods
 - webmock/minitest for HTTP mocking
+
+## Related Rules
+- **test-performance.mdc**: For preventing long-running tests and timeouts
+- **dependency-injection.mdc**: For proper mocking and test isolation

@@ -93,4 +93,7 @@ const svc = new InvoiceService(fakeGateway, fixedClock)
 ### Notes
 - This rule complements `cursor-rules-location` and applies to all new and
   modified code where external interactions may occur.
+- This rule is critical for preventing the 35+ second test timeouts we encountered
+  in upload_spec.rb when real HTTP clients were created instead of using mocks.
+- See also `test-performance.mdc` for specific guidance on preventing long-running tests.
 

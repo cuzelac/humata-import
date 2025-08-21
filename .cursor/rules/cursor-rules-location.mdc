@@ -12,7 +12,35 @@ When creating new MDC rules:
 2. Each rule MUST be in a separate file
 3. Rule files MUST use the `.mdc` extension
 4. Rule files MUST follow the naming convention: `[rule-name].mdc`
-5. Rule files MUST contain proper markdown formatting
+5. Rule files MUST contain proper markdown formatting with YAML frontmatter
+6. **Glob patterns in frontmatter MUST NOT use recursive patterns like `**`**
+
+## Frontmatter Requirements
+All MDC rule files MUST include proper YAML frontmatter with the following structure:
+```yaml
+---
+title: [Rule Title]
+description: [Brief description of the rule]
+globs: [file pattern without recursive globs]
+alwaysApply: false
+---
+```
+
+### Glob Pattern Constraints
+- **MUST NOT** use recursive directory patterns like `**`
+- **MUST NOT** use complex path traversals like `spec/**/*_spec.rb`
+- **SHOULD** use simple patterns like `*.rb`, `*_spec.rb`, or `*.mdc`
+
+### Examples of Valid Glob Patterns
+✅ **Good:**
+- `*.rb` - matches all Ruby files
+- `*_spec.rb` - matches all test files
+- `*.mdc` - matches all MDC files
+
+❌ **Bad:**
+- `spec/**/*_spec.rb` - uses recursive pattern
+- `src/**/lib/*.rb` - uses recursive pattern
+- `**/test_*.rb` - uses recursive pattern
 
 ## Implementation
 - The Cursor IDE will enforce this rule by:
@@ -20,6 +48,7 @@ When creating new MDC rules:
   - Preventing creation of MDC rules outside this directory
   - Maintaining separation of rules into individual files
   - Ensuring proper file extensions and naming conventions
+  - Validating glob patterns to prevent recursive patterns
 
 ## Benefits
 - Improved organization and maintainability

@@ -1,0 +1,164 @@
+---
+title: Test Performance and Timeout Prevention Rule
+description: Establishes standards for preventing long-running tests and timeouts, ensuring fast and reliable test execution
+globs: *_spec.rb
+alwaysApply: false
+---
+
+# Test Performance and Timeout Prevention Rule
+
+## Description
+This rule establishes standards for preventing long-running tests and timeouts, ensuring fast and reliable test execution by properly mocking external dependencies and avoiding real delays.
+
+## Rule
+When writing tests that interact with external services or have potential for delays:
+
+1. **Mock All External Dependencies**
+   - MUST provide mock clients for all external service calls
+   - MUST NOT allow tests to create real HTTP clients, database connections, or external service instances
+   - MUST use dependency injection to pass mock objects into commands/classes under test
+
+2. **Prevent Real Sleep Calls**
+   - MUST stub `sleep` calls in tests that involve retry logic or rate limiting
+   - MUST use fake time providers instead of real time delays
+   - MUST ensure tests complete in under 1 second unless explicitly testing timing behavior
+
+3. **Test Isolation Requirements**
+   - MUST use proper test lifecycle methods (`setup`/`teardown` for minitest)
+   - MUST clean up all resources between tests
+   - MUST ensure each test starts with a clean, predictable state
+   - MUST NOT allow test data to accumulate between test runs
+
+4. **Command Testing Patterns**
+   - MUST provide `humata_client:` parameter when testing Upload/Verify commands
+   - MUST mock all external API calls even when testing error conditions
+   - MUST stub sleep calls in retry-related test paths
+
+## Critical Examples
+
+### ✅ Good: Proper Mocking and Sleep Stubbing
+```ruby
+it 'handles retry logic with exponential backoff' do
+  # Create mock client that fails then succeeds
+  client_mock = Minitest::Mock.new
+  client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+  
+  upload = Upload.new({ database: @temp_db_path })
+  
+  # Mock sleep to speed up test
+  upload.stub :sleep, nil do
+    upload.run(['--folder-id', @folder_id, '--max-retries', '3'], humata_client: client_mock)
+  end
+  
+  client_mock.verify
+end
+```
+
+### ❌ Bad: Missing Mock Client (Causes 35+ Second Timeouts)
+```ruby
+it 'handles upload with no pending files' do
+  upload = Upload.new({ database: @temp_db_path })
+  upload.run(['--folder-id', @folder_id, '--threads', '1'])
+  # This creates a real HumataClient that tries to make HTTP requests!
+end
+```
+
+### ❌ Bad: Missing Sleep Stub (Causes Test Hangs)
+```ruby
+it 'handles skip retries option' do
+  client_mock = Minitest::Mock.new
+  # ... mock setup ...
+  
+  upload = Upload.new({ database: @temp_db_path })
+  upload.run(['--skip-retries'], humata_client: client_mock)
+  # Missing sleep stub - test will hang on retry delays!
+end
+```
+
+## Implementation Guidelines
+
+### 1. Always Mock External Dependencies
+```ruby
+# For Upload commands
+upload.run(['--folder-id', '123'], humata_client: client_mock)
+
+# For Verify commands  
+verify.run(['--id', '123'], humata_client: client_mock)
+
+# For other commands that make external calls
+command.run(args, external_client: mock_client)
+```
+
+### 2. Always Stub Sleep Calls
+```ruby
+# In retry-related tests
+upload.stub :sleep, nil do
+  upload.run(args, humata_client: client_mock)
+end
+
+# In rate-limiting tests
+client.stub :sleep, nil do
+  client.make_request
+end
+```
+
+### 3. Use Proper Test Lifecycle
+```ruby
+class Minitest::Spec
+  include Minitest::Hooks
+  include TestHelpers
+  
+  def setup
+    # Create fresh database for each test
+    @temp_db_path = create_temp_database
+    @db = SQLite3::Database.new(@temp_db_path)
+  end
+  
+  def teardown
+    # Clean up after each test
+    @db.close
+    File.unlink(@temp_db_path) if File.exist?(@temp_db_path)
+  end
+end
+```
+
+## Common Pitfalls to Avoid
+
+1. **Missing Mock Clients**: Tests that don't provide `humata_client:` parameter
+2. **Unstubbed Sleep Calls**: Tests involving retry logic without sleep stubbing
+3. **Improper Cleanup**: Tests that don't clean up resources between runs
+4. **Real HTTP Calls**: Tests that accidentally create real external clients
+5. **Accumulating Test Data**: Tests that don't reset state between runs
+
+## Testing Requirements
+
+### Performance Targets
+- **Unit tests**: Must complete in < 0.1 seconds
+- **Integration tests**: Must complete in < 1.0 seconds  
+- **Full test suites**: Must complete in < 10 seconds
+
+### Isolation Requirements
+- Each test must start with clean state
+- No test data must persist between tests
+- All external resources must be properly mocked
+- All time delays must be stubbed or faked
+
+## Enforcement
+- Code review must reject tests without proper mocking
+- Tests taking > 1 second must be investigated for missing mocks
+- All `upload.run()` calls must include `humata_client:` parameter
+- All retry-related tests must stub sleep calls
+
+## Benefits
+- Fast, reliable test execution
+- No more 35+ second test timeouts
+- Predictable test behavior
+- Better developer experience
+- Reduced CI/CD pipeline times
+
+## Notes
+- This rule complements `ruby-testing.mdc` and `dependency-injection.mdc`
+- Applies to all test files in the project
+- Critical for maintaining fast test feedback loops
+- Prevents the specific timeout issues we encountered in upload_spec.rb
+
