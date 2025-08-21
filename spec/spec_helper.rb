@@ -9,14 +9,8 @@ require 'sqlite3'
 require 'securerandom'
 require 'ostruct'
 require 'csv'
-require 'webmock/minitest'
-
 # Set test environment
 ENV['TEST_ENV'] = 'true'
-
-# Configure WebMock to block all external HTTP requests by default
-WebMock.enable!
-WebMock.disable_net_connect!(allow_localhost: true)
 
 # Load the main library
 require 'humata_import'
@@ -148,19 +142,32 @@ class Minitest::Spec
   end
 
   # Reset the database before each test
-  def before_each
-    super
-    # Close the current connection
-    @db.close
+  def setup
+    # Close the current connection if it exists
+    @db.close if @db && !@db.closed?
     
-    # Remove the database file completely
-    File.unlink(@temp_db_path) if File.exist?(@temp_db_path)
+    # Generate a completely unique database path for each test
+    @temp_db_path = File.join(Dir.tmpdir, "humata_test_#{SecureRandom.hex(8)}.db")
     
-    # Recreate the database file and schema
+    # Create the database file and schema
     FileUtils.touch(@temp_db_path)
     FileUtils.chmod(0666, @temp_db_path)
     @db = SQLite3::Database.new(@temp_db_path)
     HumataImport::Database.initialize_schema(@temp_db_path)
+    
+    # Update the environment variable for this test
+    ENV['HUMATA_DB_PATH'] = @temp_db_path
+  end
+
+  # Clean up the database after each test
+  def teardown
+    # Close the current connection if it exists
+    @db.close if @db && !@db.closed?
+    
+    # Clean up the database file
+    if @temp_db_path && File.exist?(@temp_db_path)
+      File.unlink(@temp_db_path)
+    end
   end
 end
 

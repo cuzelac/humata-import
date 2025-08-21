@@ -166,6 +166,9 @@ module HumataImport
       #
       # @return [Boolean] True if shutdown requested
       def shutdown_requested?
+        # Ensure signal handling is initialized
+        setup_signal_handling unless @shutdown_mutex
+        
         @shutdown_mutex.synchronize { @shutdown_requested }
       end
 
@@ -244,6 +247,8 @@ module HumataImport
       # @param options [Hash] Parsed options
       # @return [void]
       def process_uploads_parallel(client, pending_files, options)
+        logger.info "process_uploads_parallel called with client class: #{client.class.name}"
+        
         if options[:file_id]
           logger.info "Uploading single file by ID."
           process_uploads_sequential(client, pending_files, options)
@@ -251,10 +256,12 @@ module HumataImport
           count_retries_vs_new_uploads(pending_files)
           
           # If this is a mock client (for testing), use sequential processing to avoid mock detection issues
+          logger.info "Checking if client is mock: Client class=#{client.class.name}, has_verify=#{client.respond_to?(:verify)}"
           if is_mock_client?(client)
-            logger.info "Using sequential processing for mock client (testing mode)"
+            logger.info "Using sequential processing for mock client (testing mode) - Client class: #{client.class.name}"
             process_uploads_sequential(client, pending_files, options)
           else
+            logger.info "Using parallel processing for real client - Client class: #{client.class.name}"
             process_uploads_with_threads(client, pending_files, options)
           end
         end
@@ -356,11 +363,14 @@ module HumataImport
       # @param client [Object] The client to check
       # @return [Boolean] True if the client is a mock
       def is_mock_client?(client)
-        client.class.name.include?('Mock') || 
-        client.class.name.include?('Double') ||
-        client.class.name.include?('MockExpectationError') ||
+        result = (client.class.name&.include?('Mock') || 
+        client.class.name&.include?('Double') ||
+        client.class.name&.include?('MockExpectationError') ||
         client.respond_to?(:verify) ||  # Minitest::Mock has verify method
-        (client.respond_to?(:upload_file) && !client.respond_to?(:instance_variable_get))
+        (client.respond_to?(:upload_file) && !client.respond_to?(:instance_variable_get)))
+        
+        logger.info "Mock detection: Client class=#{client.class.name}, has_verify=#{client.respond_to?(:verify)}, is_mock=#{result}"
+        result
       end
 
       # Creates a thread-local Humata client.

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
-require 'webmock/minitest'
 
 describe 'Error Handling Integration' do
   let(:gdrive_url) { 'https://drive.google.com/drive/folders/abc123' }
@@ -105,11 +104,11 @@ describe 'Error Handling Integration' do
       upload = HumataImport::Commands::Upload.new(database: @db_path)
       upload.run(['--folder-id', folder_id, '--retry-delay', '0'], humata_client: mock_client)
 
-      # Verify error handling
+      # Verify error handling - HumataError is not retryable, so each file gets processed once
       files = @db.execute('SELECT upload_status, processing_status FROM file_records')
       _(files.all? { |f| f[0] == 'failed' }).must_equal true  # upload_status = 'failed'
       _(files.all? { |f| f[1] == 'failed' }).must_equal true  # processing_status = 'failed'
-      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each (no retries in current implementation)
+      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each (HumataError is not retryable)
     end
 
     it 'handles rate limiting with retries' do
@@ -138,13 +137,13 @@ describe 'Error Handling Integration' do
       upload = HumataImport::Commands::Upload.new(database: @db_path)
       upload.run(['--folder-id', folder_id, '--max-retries', '3', '--retry-delay', '0'], humata_client: mock_client)
 
-      # Verify behavior (no retries in current implementation)
+      # Verify behavior with retry logic (3 files × 4 attempts each = 12 total calls)
       files = @db.execute('SELECT processing_status FROM file_records')
       failed_count = files.count { |f| f[0] == 'failed' }  # processing_status = 'failed'
       pending_count = files.count { |f| f[0] == 'pending' }  # processing_status = 'pending'
-      _(failed_count).must_equal 3  # All 3 files failed immediately (no retries)
+      _(failed_count).must_equal 3  # All 3 files failed after exhausting retries
       _(pending_count).must_equal 0  # No files succeeded
-      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each
+      _(mock_client.call_count).must_equal 12  # 3 files × 4 attempts each (initial + 3 retries)
     end
 
     it 'handles network timeouts' do
@@ -166,7 +165,7 @@ describe 'Error Handling Integration' do
 
       files = @db.execute('SELECT processing_status FROM file_records')
       _(files.all? { |f| f[0] == 'failed' }).must_equal true  # processing_status = 'failed'
-      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each (no retries in current implementation)
+      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each (NetworkError is not retryable)
     end
 
     it 'handles invalid file errors' do
@@ -188,7 +187,7 @@ describe 'Error Handling Integration' do
 
       files = @db.execute('SELECT processing_status FROM file_records')
       _(files.all? { |f| f[0] == 'failed' }).must_equal true  # processing_status = 'failed'
-      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each (no retries in current implementation)
+      _(mock_client.call_count).must_equal 3  # 3 files × 1 attempt each (ValidationError is not retryable)
     end
   end
 

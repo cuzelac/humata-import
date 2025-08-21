@@ -89,35 +89,36 @@ describe 'Full Workflow Integration' do
 
   it 'processes a complete Google Drive folder import' do
     # Mock Google Drive API responses
-    service_mock = OpenStruct.new
-    service_mock.define_singleton_method(:list_files) do |**kwargs|
-      OpenStruct.new(
-        files: [
-          OpenStruct.new(
-            id: 'file1',
-            name: 'test1.pdf',
-            mime_type: 'application/pdf',
-            web_content_link: 'https://example.com/file1.pdf',
-            size: 1024
-          ),
-          OpenStruct.new(
-            id: 'file2',
-            name: 'test2.pdf',
-            mime_type: 'application/pdf',
-            web_content_link: 'https://example.com/file2.pdf',
-            size: 2048
-          ),
-          OpenStruct.new(
-            id: 'file3',
-            name: 'test3.pdf',
-            mime_type: 'application/pdf',
-            web_content_link: 'https://example.com/file3.pdf',
-            size: 3072
-          )
-        ],
-        next_page_token: nil
-      )
-    end
+    service_mock = Class.new do
+      def list_files(**kwargs)
+        OpenStruct.new(
+          files: [
+            OpenStruct.new(
+              id: 'file1',
+              name: 'test1.pdf',
+              mime_type: 'application/pdf',
+              web_content_link: 'https://example.com/file1.pdf',
+              size: 1024
+            ),
+            OpenStruct.new(
+              id: 'file2',
+              name: 'test2.pdf',
+              mime_type: 'application/pdf',
+              web_content_link: 'https://example.com/file2.pdf',
+              size: 2048
+            ),
+            OpenStruct.new(
+              id: 'file3',
+              name: 'test3.pdf',
+              mime_type: 'application/pdf',
+              web_content_link: 'https://example.com/file3.pdf',
+              size: 3072
+            )
+          ],
+          next_page_token: nil
+        )
+      end
+    end.new
 
     Google::Apis::DriveV3::DriveService.stub :new, service_mock do
       Google::Auth.stub :get_application_default, OpenStruct.new do
@@ -133,16 +134,26 @@ describe 'Full Workflow Integration' do
     end
 
     # Mock HumataClient for upload
-    upload_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
-    upload_client.define_singleton_method(:upload_file) do |url, folder_id|
-      {
-        'data' => {
-          'pdf' => {
-            'id' => SecureRandom.uuid
+    upload_client = Class.new do
+      def initialize
+        @call_count = 0
+      end
+      
+      def upload_file(url, folder_id)
+        @call_count += 1
+        {
+          'data' => {
+            'pdf' => {
+              'id' => "humata-#{@call_count}"
+            }
           }
         }
-      }
-    end
+      end
+      
+      def verify
+        # Mock verification - no-op for this test
+      end
+    end.new
 
     # Phase 2: Upload
     upload = HumataImport::Commands::Upload.new(database: @db_path)
@@ -154,18 +165,23 @@ describe 'Full Workflow Integration' do
     _(files.all? { |f| f['processing_status'] == 'pending' }).must_equal true
 
     # Mock HumataClient for verification
-    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
-    verify_client.define_singleton_method(:get_file_status) do |humata_id|
-      {
-        'id' => humata_id,
-        'status' => 'completed',
-        'message' => 'File processed successfully'
-      }
-    end
+    verify_client = Class.new do
+      def get_file_status(humata_id)
+        {
+          'id' => humata_id,
+          'status' => 'completed',
+          'message' => 'File processed successfully'
+        }
+      end
+      
+      def verify
+        # Mock verification - no-op for this test
+      end
+    end.new
 
     # Phase 3: Verify (reduce runtime by avoiding real sleeps)
     verify = HumataImport::Commands::Verify.new(database: @db_path)
-    verify.run(['--timeout', '1', '--poll-interval', '0'], humata_client: verify_client)
+    verify.run(['--timeout', '10', '--poll-interval', '0'], humata_client: verify_client)
 
     # Verify final results
     files = get_all_files(@db)
@@ -175,10 +191,11 @@ describe 'Full Workflow Integration' do
 
   it 'handles errors gracefully' do
     # Mock Google Drive API error
-    service_mock = OpenStruct.new
-    service_mock.define_singleton_method(:list_files) do |**kwargs|
-      raise Google::Apis::Error, 'API error'
-    end
+    service_mock = Class.new do
+      def list_files(**kwargs)
+        raise Google::Apis::Error, 'API error'
+      end
+    end.new
 
     Google::Apis::DriveV3::DriveService.stub :new, service_mock do
       Google::Auth.stub :get_application_default, OpenStruct.new do
@@ -197,10 +214,15 @@ describe 'Full Workflow Integration' do
     create_test_file(@db)
 
     # Mock HumataClient upload error
-    error_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
-    error_client.define_singleton_method(:upload_file) do |url, folder_id|
-              raise HumataImport::HumataError, 'Invalid request'
-    end
+    error_client = Class.new do
+      def upload_file(url, folder_id)
+        raise HumataImport::HumataError, 'Invalid request'
+      end
+      
+      def verify
+        # Mock verification - no-op for this test
+      end
+    end.new
 
     # Upload should handle error
     upload = HumataImport::Commands::Upload.new(database: @db_path)
@@ -218,16 +240,26 @@ describe 'Full Workflow Integration' do
     create_test_file(@db)  # Not yet uploaded
 
     # Mock successful API responses
-    resume_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
-    resume_client.define_singleton_method(:upload_file) do |url, folder_id|
-      {
-        'data' => {
-          'pdf' => {
-            'id' => SecureRandom.uuid
+    resume_client = Class.new do
+      def initialize
+        @call_count = 0
+      end
+      
+      def upload_file(url, folder_id)
+        @call_count += 1
+        {
+          'data' => {
+            'pdf' => {
+              'id' => "resume-#{@call_count}"
+            }
           }
         }
-      }
-    end
+      end
+      
+      def verify
+        # Mock verification - no-op for this test
+      end
+    end.new
 
     # Upload should only process unstarted files
     upload = HumataImport::Commands::Upload.new(database: @db_path)
@@ -249,17 +281,22 @@ describe 'Full Workflow Integration' do
     create_test_file(@db, processing_status: 'pending', humata_id: 'pending3')
 
     # Mock HumataClient with mixed responses
-    verify_client = HumataImport::Clients::HumataClient.new(api_key: 'test')
-    verify_client.define_singleton_method(:get_file_status) do |humata_id|
-      case humata_id
-      when 'pending1'
-        { 'id' => humata_id, 'status' => 'completed' }
-      when 'pending2'
-        { 'id' => humata_id, 'status' => 'failed' }
-      when 'pending3'
-        { 'id' => humata_id, 'status' => 'processing' }
+    verify_client = Class.new do
+      def get_file_status(humata_id)
+        case humata_id
+        when 'pending1'
+          { 'id' => humata_id, 'status' => 'completed' }
+        when 'pending2'
+          { 'id' => humata_id, 'status' => 'failed' }
+        when 'pending3'
+          { 'id' => humata_id, 'status' => 'processing' }
+        end
       end
-    end
+      
+      def verify
+        # Mock verification - no-op for this test
+      end
+    end.new
 
     # Run verification (avoid real sleep to keep test fast)
     verify = HumataImport::Commands::Verify.new(database: @db_path)

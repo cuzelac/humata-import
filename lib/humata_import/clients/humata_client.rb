@@ -132,6 +132,26 @@ module HumataImport
             @logger.debug "Making request to #{uri}"
             response = @http_client.request(request)
             @last_request_time = @time_provider.now
+            
+            # Handle error responses for injected HTTP clients
+            case response.code.to_i
+            when 401, 403
+              raise HumataImport::AuthenticationError, "Authentication failed: #{response.message}"
+            when 404
+              raise HumataImport::ValidationError, "Resource not found: #{response.message}"
+            when 429
+              raise HumataImport::TransientError, "Rate limit exceeded: #{response.message}"
+            when 500..599
+              raise HumataImport::TransientError, "Server error: #{response.message}"
+            when 400..499
+              error_message = begin
+                JSON.parse(response.body)['message']
+              rescue JSON::ParserError
+                "HTTP #{response.code}: #{response.message}"
+              end
+              raise HumataImport::ValidationError, "Client error: #{error_message}"
+            end
+            
             response
           else
             # Use default HTTP client
@@ -170,6 +190,9 @@ module HumataImport
           raise HumataImport::NetworkError, "Request timeout: #{e.message}"
         rescue SocketError, Errno::ECONNREFUSED => e
           raise HumataImport::NetworkError, "Connection failed: #{e.message}"
+        rescue HumataImport::AuthenticationError, HumataImport::ValidationError, HumataImport::TransientError => e
+          # Re-raise specific exceptions without wrapping them
+          raise e
         rescue StandardError => e
           raise HumataImport::HumataError, "Unexpected error: #{e.message}"
         end
