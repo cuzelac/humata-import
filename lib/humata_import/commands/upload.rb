@@ -508,7 +508,7 @@ module HumataImport
       # @return [void]
       def update_file_success_threaded(thread_db, gdrive_id, humata_id, response)
         thread_db.execute(
-          "UPDATE file_records SET humata_id = ?, upload_status = 'completed', processing_status = 'pending', humata_import_response = ?, uploaded_at = datetime('now') WHERE gdrive_id = ?",
+          "UPDATE file_records SET humata_id = ?, upload_status = 'completed', processing_status = 'pending', humata_import_response = ?, uploaded_at = datetime('now'), last_error = NULL WHERE gdrive_id = ?",
           [humata_id, response.to_json, gdrive_id]
         )
       end
@@ -678,7 +678,7 @@ module HumataImport
       # @return [void]
       def update_file_success(gdrive_id, humata_id, response)
         @db.execute(
-          "UPDATE file_records SET humata_id = ?, upload_status = 'completed', processing_status = 'pending', humata_import_response = ?, uploaded_at = datetime('now') WHERE gdrive_id = ?",
+          "UPDATE file_records SET humata_id = ?, upload_status = 'completed', processing_status = 'pending', humata_import_response = ?, uploaded_at = datetime('now'), last_error = NULL WHERE gdrive_id = ?",
           [humata_id, response.to_json, gdrive_id]
         )
       end
