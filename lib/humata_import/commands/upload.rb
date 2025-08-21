@@ -34,8 +34,13 @@ require 'logger'
 module HumataImport
   module Commands
     # Command for uploading discovered files to Humata.ai.
-    # Handles batch processing, rate limiting, response storage, and parallel processing.
-    class Upload < Base
+# Handles batch processing, rate limiting, response storage, and parallel processing.
+#
+# Database Field Usage:
+#   - last_error: TODO: Rename to 'upload_error' - stores error message when upload fails,
+#     gets cleared (set to NULL) when upload succeeds. This field tracks upload-specific
+#     failures and is distinct from processing_status which tracks Humata processing state.
+class Upload < Base
       # @return [Integer] Default number of concurrent threads
       DEFAULT_THREADS = 4
       
@@ -520,6 +525,7 @@ module HumataImport
       # @param error_message [String] Error message
       # @param response [Hash] API response
       # @return [void]
+      # TODO: Rename 'last_error' field to 'upload_error' in database schema and update this method
       def update_file_failure_threaded(thread_db, gdrive_id, error_message, response)
         thread_db.execute(
           "UPDATE file_records SET upload_status = 'failed', processing_status = 'failed', last_error = ?, humata_import_response = ? WHERE gdrive_id = ?",
@@ -689,6 +695,7 @@ module HumataImport
       # @param error_message [String] Error message
       # @param response [Hash] API response
       # @return [void]
+      # TODO: Rename 'last_error' field to 'upload_error' in database schema and update this method
       def update_file_failure(gdrive_id, error_message, response)
         @db.execute(
           "UPDATE file_records SET upload_status = 'failed', processing_status = 'failed', last_error = ?, humata_import_response = ? WHERE gdrive_id = ?",

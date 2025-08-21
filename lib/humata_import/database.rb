@@ -49,7 +49,7 @@ module HumataImport
           humata_id TEXT,
           upload_status TEXT DEFAULT 'pending',
           processing_status TEXT,
-          last_error TEXT,
+          last_error TEXT, -- TODO: Rename to 'upload_error' - stores error message when upload fails, cleared on successful upload
           humata_verification_response TEXT,
           humata_import_response TEXT,
           discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
