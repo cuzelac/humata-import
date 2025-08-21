@@ -142,7 +142,8 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 
 #### 3.3.1 Functionality
 - Upload files to Humata.ai in configurable batches
-- Handle rate limiting and retry logic
+- Process files concurrently using multiple threads for improved throughput
+- Handle rate limiting and retry logic with per-thread rate distribution
 - Store complete API responses for debugging
 - Track upload status and errors
 - Support retry of failed uploads
@@ -151,6 +152,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - `--folder-id ID`: Humata folder ID (required)
 - `--id ID`: Upload specific file by gdrive_id
 - `--batch-size N`: Files to process in parallel (default: 10)
+- `--threads N`: Number of concurrent upload threads (default: 4, max: 16)
 - `--max-retries N`: Maximum retry attempts (default: 3)
 - `--retry-delay N`: Seconds between retries (default: 5)
 - `--skip-retries`: Skip retrying failed uploads
@@ -162,8 +164,18 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - **Rate Limiting**: Built-in rate limiting (120 requests/minute)
 - **Network Failures**: Retry with configurable limits
 - **Invalid URLs**: URL optimization to reduce 500 errors
+- **Retry Logic**: Configurable retry attempts with exponential backoff
+- **Retry Configuration**: User-configurable retry limits and delays
 
-#### 3.3.4 Interruption Handling
+#### 3.3.4 Parallelization
+- **Thread-Based Processing**: Multiple threads process files concurrently
+- **Per-Thread Rate Limiting**: Each thread respects its portion of the 120 requests/minute limit
+- **Thread Safety**: Thread-safe database operations and resource management
+- **Configurable Concurrency**: User can specify number of threads (1-16)
+- **Resource Isolation**: Each thread has its own HTTP client and database connection
+- **Error Isolation**: Thread failures don't affect other threads
+
+#### 3.3.5 Interruption Handling
 - **Signal Trapping**: Graceful shutdown on SIGINT/SIGTERM
 - **Progress Checkpointing**: Save upload state before termination
 - **Current File Completion**: Allow current file upload to complete
@@ -390,8 +402,43 @@ export TEST_ENV="true"  # Skip authentication in tests
 - **Status Polling**: Continuous polling until completion or timeout
 - **Rate Limiting**: Automatic throttling to respect API limits
 - **Network Resilience**: Handle temporary network issues
+- **Exponential Backoff**: Automatic delay increase between retry attempts
+- **Configurable Limits**: User-defined maximum retry attempts and base delays
+- **Retry Tracking**: Complete history of retry attempts and failures
 
-### 8.4 Interruption Handling
+### 8.4 Retry Configuration and Behavior
+
+#### 8.4.1 Retry Options
+- **--max-retries N**: Maximum number of retry attempts per file (default: 3)
+- **--retry-delay N**: Base delay in seconds between retry attempts (default: 5)
+- **--skip-retries**: Option to disable retry logic entirely
+
+#### 8.4.2 Exponential Backoff Algorithm
+- **Base Delay**: User-specified delay between first and second retry
+- **Multiplier**: Each subsequent retry doubles the previous delay
+- **Formula**: `delay = base_delay * (2^(retry_number - 1))`
+- **Example**: With base delay of 5s: 5s, 10s, 20s, 40s...
+- **Maximum Delay**: Capped at 300 seconds (5 minutes) to prevent excessive delays
+
+#### 8.4.3 Retryable Error Types
+- **Rate Limit Exceeded (429)**: Automatic retry with exponential backoff
+- **Server Errors (5xx)**: Retry with increasing delays
+- **Network Timeouts**: Retry for temporary connectivity issues
+- **Temporary API Failures**: Retry for transient service issues
+
+#### 8.4.4 Non-Retryable Error Types
+- **Authentication Errors (401/403)**: No retry (requires user intervention)
+- **Validation Errors (400)**: No retry (invalid request data)
+- **Resource Not Found (404)**: No retry (permanent condition)
+- **Permanent API Failures**: No retry (requires investigation)
+
+#### 8.4.5 Retry State Management
+- **Retry Counter**: Track number of attempts per file
+- **Last Retry Time**: Record timestamp of last retry attempt
+- **Error History**: Store all error messages and response data
+- **Status Tracking**: Mark files as "retrying" during retry attempts
+
+### 8.5 Interruption Handling
 - **Signal Trapping**: Graceful shutdown on SIGINT/SIGTERM signals
 - **Progress Checkpointing**: Save partial upload state before termination
 - **Resource Cleanup**: Proper cleanup of database connections and file handles
@@ -440,20 +487,24 @@ To enhance the robustness of the application, the following improvements are rec
 ### 9.1 Expected Performance
 - **Discovery**: ~100 files/second (Google Drive API limited)
 - **Upload**: ~5-10 files/second (Humata API rate limited)
+- **Upload (Parallel)**: ~20-40 files/second with 4 threads (4x improvement)
 - **Verification**: ~120 status checks/minute (Humata API limit)
 - **Database**: Handles 10,000+ files efficiently
 
 ### 9.2 Scalability Limits
 - **Single Process**: Limited by API rate limits, not database
+- **Parallel Processing**: Up to 16 concurrent threads for upload operations
 - **Database Size**: SQLite handles millions of records
 - **Memory Usage**: Minimal (only active batch in memory)
 - **Concurrent Operations**: Configurable batch sizes for parallel processing
+- **Thread Scaling**: Optimal performance with 4 threads, diminishing returns beyond 8 threads
 
 ### 9.3 Resource Requirements
 - **Disk Space**: ~1KB per file record + database overhead
-- **Memory**: Minimal (streaming processing)
+- **Memory**: Minimal (streaming processing) + ~2-5MB per thread
 - **Network**: Dependent on file sizes and API response times
 - **CPU**: Low (mostly I/O bound operations)
+- **Thread Overhead**: Each thread adds minimal CPU and memory overhead
 
 ## 10. Security Considerations
 
@@ -512,12 +563,83 @@ rake install
 - **Database Location**: Specify database file path
 - **Logging Configuration**: Set appropriate log levels
 - **Rate Limiting**: Configure batch sizes and intervals
+- **Parallelization**: Set number of concurrent upload threads
+- **Retry Configuration**: Set retry limits and backoff delays
+- **Error Handling**: Configure which errors should trigger retries
 
 ### 12.3 Monitoring
 - **Progress Tracking**: Real-time status monitoring
 - **Error Monitoring**: Comprehensive error logging
 - **Performance Monitoring**: Track processing rates and bottlenecks
 - **Resource Monitoring**: Monitor disk space and memory usage
+- **Retry Monitoring**: Track retry attempts and success rates
+- **Backoff Analysis**: Monitor effectiveness of exponential backoff
+
+## 12.4 Retry Configuration Examples
+
+### 12.4.1 Basic Retry Configuration
+```bash
+# Default retry behavior (3 attempts, 5s base delay)
+humata-import upload --folder-id abc123
+
+# Conservative retry settings (5 attempts, 10s base delay)
+humata-import upload --folder-id abc123 --max-retries 5 --retry-delay 10
+
+# Aggressive retry settings (2 attempts, 2s base delay)
+humata-import upload --folder-id abc123 --max-retries 2 --retry-delay 2
+
+# Disable retries entirely
+humata-import upload --folder-id abc123 --skip-retries
+```
+
+### 12.4.2 Parallelization Configuration
+```bash
+# Default parallel processing (4 threads)
+humata-import upload --folder-id abc123
+
+# Single-threaded processing (sequential)
+humata-import upload --folder-id abc123 --threads 1
+
+# High-concurrency processing (8 threads)
+humata-import upload --folder-id abc123 --threads 8
+
+# Maximum concurrency (16 threads)
+humata-import upload --folder-id abc123 --threads 16
+
+# Combined with retry settings
+humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-delay 8
+```
+
+### 12.4.2 Retry Behavior Examples
+```bash
+# Example 1: Rate limit hit with 5s base delay
+# Attempt 1: Immediate failure (429 rate limit)
+# Attempt 2: Wait 5s, then retry
+# Attempt 3: Wait 10s, then retry
+# Attempt 4: Wait 20s, then retry
+# Final: Mark as failed after 3 retries
+
+# Example 2: Server error with 10s base delay
+# Attempt 1: Immediate failure (500 server error)
+# Attempt 2: Wait 10s, then retry
+# Attempt 3: Wait 20s, then retry
+# Attempt 4: Wait 40s, then retry
+# Attempt 5: Wait 80s, then retry
+# Final: Mark as failed after 4 retries
+```
+
+### 12.4.3 Production Retry Recommendations
+- **High-Volume Uploads**: Use `--max-retries 3 --retry-delay 5` (balanced)
+- **Unstable Networks**: Use `--max-retries 5 --retry-delay 10` (conservative)
+- **Fast Processing**: Use `--max-retries 2 --retry-delay 2` (aggressive)
+- **Debugging**: Use `--skip-retries` to identify permanent failures quickly
+
+### 12.4.4 Production Parallelization Recommendations
+- **Standard Operations**: Use `--threads 4` (optimal performance)
+- **High-Volume Processing**: Use `--threads 6-8` (increased throughput)
+- **Resource-Constrained Systems**: Use `--threads 2` (reduced resource usage)
+- **Debugging/Testing**: Use `--threads 1` (sequential processing for troubleshooting)
+- **Maximum Throughput**: Use `--threads 16` (may hit API rate limits)
 
 ## 13. Future Enhancements
 
@@ -530,6 +652,8 @@ rake install
 - **Enhanced Interruption Handling**: Improved signal handling and graceful shutdown
 - **Progress Persistence**: Save and restore upload progress across sessions
 - **Resume Points**: User-configurable checkpoint intervals for long-running operations
+- **Advanced Retry Strategies**: Custom retry policies and adaptive backoff
+- **Retry Analytics**: Detailed retry success rate analysis and optimization
 
 ### 13.2 Scalability Improvements
 - **Distributed Processing**: Multi-node processing capabilities
