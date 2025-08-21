@@ -1,0 +1,264 @@
+---
+title: Mock Client and Test Double Patterns
+description: Establishes best practices for creating and using mock clients and test doubles for external service integrations
+globs: *_spec.rb
+alwaysApply: false
+---
+
+# Mock Client and Test Double Patterns Rule
+
+## Description
+This rule establishes best practices for creating and using mock clients and test doubles, particularly for external service integrations, ensuring reliable and maintainable test suites.
+
+## Rule
+When creating mock clients for external services:
+
+1. **Mock Client Design**
+   - Mock clients MUST implement all methods expected by the system under test
+   - Mock clients MUST provide deterministic, predictable behavior
+   - Mock clients MUST support complex scenarios (success, failure, mixed results)
+   - Mock clients MUST be easily identifiable by mock detection logic
+
+2. **Mock Client Implementation**
+   - Use proper class definitions instead of anonymous objects for complex mocks
+   - Implement state tracking for multi-call scenarios
+   - Provide meaningful error messages and responses
+   - Include `verify` method for compatibility with test frameworks
+
+3. **Mock Detection Patterns**
+   - Mock detection MUST handle `nil` class names (anonymous classes)
+   - Use safe navigation operators for class name checks
+   - Check for mock-specific methods like `verify`
+   - Provide fallback detection mechanisms
+
+4. **Error Simulation**
+   - Simulate realistic error conditions and responses
+   - Use proper exception classes that match production behavior
+   - Test both transient and permanent error scenarios
+   - Verify error handling and recovery mechanisms
+
+## Critical Implementation Patterns
+
+### ✅ Good: Robust Mock Client
+```ruby
+# Complex mock client with state tracking
+client_mock = Class.new do
+  def initialize
+    @call_count = 0
+  end
+  
+  def upload_file(url, folder_id)
+    @call_count += 1
+    
+    case @call_count
+    when 1
+      { 'data' => { 'pdf' => { 'id' => 'success-1' } } }
+    when 2
+      raise ExternalService::TransientError, 'Rate limit exceeded'
+    when 3
+      { 'data' => { 'pdf' => { 'id' => 'success-3' } } }
+    else
+      raise ExternalService::PermanentError, 'Quota exceeded'
+    end
+  end
+  
+  def verify
+    # Compatible with Minitest::Mock interface
+  end
+end.new
+```
+
+### ✅ Good: Safe Mock Detection
+```ruby
+def is_mock_client?(client)
+  # Safe navigation for nil class names
+  (client.class.name&.include?('Mock') ||
+   client.class.name&.include?('Double') ||
+   client.respond_to?(:verify) ||
+   # Fallback: check for mock-like behavior
+   (client.respond_to?(:upload_file) && !client.respond_to?(:instance_variable_get)))
+end
+```
+
+### ❌ Bad: Fragile Mock with Proc Returns
+```ruby
+# Don't use Proc objects as return values
+client_mock = Minitest::Mock.new
+client_mock.expect :upload_file, -> { raise SomeError }, [String, String]
+# This returns a Proc, not an exception!
+```
+
+### ❌ Bad: Unsafe Mock Detection
+```ruby
+def is_mock_client?(client)
+  # This will crash on anonymous classes
+  client.class.name.include?('Mock')
+end
+```
+
+## Mock Client Categories
+
+### 1. Simple Success Mock
+```ruby
+client_mock = Minitest::Mock.new
+client_mock.expect :upload_file, { 'id' => 'success' }, [String, String]
+```
+
+### 2. Error Simulation Mock
+```ruby
+client_mock = Object.new
+def client_mock.upload_file(url, folder_id)
+  raise ExternalService::PermanentError, 'Invalid file type'
+end
+def client_mock.verify; end
+```
+
+### 3. Complex Scenario Mock
+```ruby
+client_mock = Class.new do
+  def initialize
+    @responses = [
+      { 'data' => { 'pdf' => { 'id' => 'doc-1' } } },
+      -> { raise ExternalService::TransientError, 'Temporary failure' },
+      { 'data' => { 'pdf' => { 'id' => 'doc-3' } } }
+    ]
+    @call_index = 0
+  end
+  
+  def upload_file(url, folder_id)
+    response = @responses[@call_index]
+    @call_index += 1
+    
+    if response.is_a?(Proc)
+      response.call
+    else
+      response
+    end
+  end
+  
+  def verify; end
+end.new
+```
+
+## Mock Detection Best Practices
+
+### Comprehensive Detection Logic
+```ruby
+def is_mock_client?(client)
+  # Check class name safely
+  class_name_indicates_mock = client.class.name&.include?('Mock') ||
+                             client.class.name&.include?('Double') ||
+                             client.class.name&.include?('Stub')
+  
+  # Check for mock-specific methods
+  has_mock_methods = client.respond_to?(:verify) ||
+                    client.respond_to?(:expect)
+  
+  # Check for mock-like behavior patterns
+  behaves_like_mock = client.respond_to?(:upload_file) &&
+                     !client.respond_to?(:instance_variable_get)
+  
+  result = class_name_indicates_mock || has_mock_methods || behaves_like_mock
+  
+  logger.debug "Mock detection: #{client.class.name} -> #{result}"
+  result
+end
+```
+
+## Error Handling Patterns
+
+### Realistic Error Simulation
+```ruby
+# Simulate realistic API error responses
+def simulate_api_error(error_type)
+  case error_type
+  when :rate_limit
+    raise ExternalService::TransientError, 'Rate limit exceeded. Retry after 60 seconds'
+  when :invalid_file
+    raise ExternalService::PermanentError, 'File format not supported'
+  when :network_timeout
+    raise Net::TimeoutError, 'Request timeout after 30 seconds'
+  when :server_error
+    raise ExternalService::TransientError, 'Internal server error (500)'
+  end
+end
+```
+
+### Error Recovery Testing
+```ruby
+it 'handles transient errors with retry logic' do
+  client_mock = Class.new do
+    def initialize
+      @attempt = 0
+    end
+    
+    def upload_file(url, folder_id)
+      @attempt += 1
+      if @attempt <= 2
+        raise ExternalService::TransientError, 'Temporary failure'
+      else
+        { 'data' => { 'pdf' => { 'id' => 'retry-success' } } }
+      end
+    end
+    
+    def verify; end
+  end.new
+  
+  # Test should succeed after retries
+  result = service.upload_with_retries(client_mock, 'test-url', 'folder-123')
+  _(result['data']['pdf']['id']).must_equal 'retry-success'
+end
+```
+
+## Common Pitfalls to Avoid
+
+1. **Proc Return Values**: Using `-> { raise ... }` as mock return values
+2. **Unsafe Class Name Access**: Not handling `nil` class names for anonymous classes
+3. **Incomplete Mock Interface**: Missing methods that production code expects
+4. **Unrealistic Error Simulation**: Using generic exceptions instead of service-specific ones
+5. **State Leakage**: Mock state persisting between tests
+
+## Testing Complex Scenarios
+
+### Mixed Success/Failure Patterns
+```ruby
+it 'handles mixed success and failure scenarios' do
+  files_to_process = 3
+  expected_successes = 2
+  expected_failures = 1
+  
+  # Create mock that simulates realistic mixed results
+  client_mock = create_mixed_result_mock(files_to_process)
+  
+  service.process_files(client_mock, files_to_process)
+  
+  # Verify expected outcomes
+  results = get_processing_results
+  _(count_successes(results)).must_equal expected_successes
+  _(count_failures(results)).must_equal expected_failures
+end
+```
+
+## Benefits
+- Reliable and predictable test behavior
+- Comprehensive testing of error scenarios
+- Better isolation from external service changes
+- Faster test execution without network calls
+- Easier debugging of integration issues
+
+## Enforcement
+- All external service calls in tests must use mock clients
+- Mock clients must implement complete interfaces
+- Mock detection logic must handle edge cases safely
+- Error simulation must use realistic exception types
+
+## Notes
+- This rule complements `dependency-injection.mdc` for proper service mocking
+- Essential for testing external service integrations reliably
+- Helps prevent flaky tests due to network issues or service outages
+- Critical for maintaining fast test suites
+## Notes
+- This rule complements `dependency-injection.mdc` for proper service mocking
+- Essential for testing external service integrations reliably
+- Helps prevent flaky tests due to network issues or service outages
+- Critical for maintaining fast test suites
