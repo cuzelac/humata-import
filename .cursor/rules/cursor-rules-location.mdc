@@ -73,3 +73,8 @@ alwaysApply: false
   └── other-rules/
       └── another-rule.mdc
 ``` 
+
+  │   └── mdc-rules-location.mdc
+  └── other-rules/
+      └── another-rule.mdc
+``` 

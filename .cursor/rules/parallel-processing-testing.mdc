@@ -285,3 +285,9 @@ end.new
 - Essential for testing complex concurrent operations reliably
 - Helps prevent flaky tests due to timing issues or race conditions
 - Critical for maintaining fast, deterministic test suites
+
+## Notes
+- This rule complements `ruby-concurrency.mdc` for production threading patterns
+- Essential for testing complex concurrent operations reliably
+- Helps prevent flaky tests due to timing issues or race conditions
+- Critical for maintaining fast, deterministic test suites
