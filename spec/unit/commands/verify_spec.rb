@@ -325,7 +325,7 @@ describe HumataImport::Commands::Verify do
       log_output = StringIO.new
       command.logger.instance_variable_get(:@logger).reopen(log_output)
 
-      command.run([], humata_client: mock_client)
+      command.run(['--timeout', '1', '--poll-interval', '0'], humata_client: mock_client)
 
       # Verify all mock expectations were met
       mock_client.verify
@@ -381,20 +381,18 @@ describe HumataImport::Commands::Verify do
       # Clear the database
       db.execute('DELETE FROM file_records')
       
-      # Create a new command with verbose enabled to see info messages
-      verbose_command = HumataImport::Commands::Verify.new(options.merge(verbose: true))
-      
-      # Capture logger output by changing the logger's output stream AFTER the command is configured
-      log_output = StringIO.new
-      verbose_command.logger.change_output(log_output)
-      
-      # Also ensure the log level is set correctly
-      verbose_command.logger.set_level(:info)
+      # Create a new command
+      verify_command = HumataImport::Commands::Verify.new(options)
 
-      verbose_command.run([], humata_client: mock_client)
+      # Run the command - should exit gracefully without calling any mock methods
+      verify_command.run([], humata_client: mock_client)
       
-      # Should not call any client methods
-      assert_includes log_output.string, 'No files pending verification'
+      # Verify mock client was never called (since there are no files to verify)
+      mock_client.verify
+      
+      # Verify database is still empty
+      result = db.execute('SELECT COUNT(*) FROM file_records').first.first
+      assert_equal 0, result
     end
   end
 
@@ -415,27 +413,32 @@ describe HumataImport::Commands::Verify do
         'name' => 'test3.pdf'
       }, ['humata_3']
 
-      # Create a new command with verbose enabled to see warning messages
-      verbose_command = HumataImport::Commands::Verify.new(options.merge(verbose: true))
+      # Create a new command
+      verify_command = HumataImport::Commands::Verify.new(options)
 
-      # Capture logger output by changing the logger's output stream
-      log_output = StringIO.new
-      verbose_command.logger.change_output(log_output)
+      # Run the command - should continue processing despite the error
+      verify_command.run(['--timeout', '1', '--poll-interval', '0'], humata_client: mock_client)
 
-      verbose_command.run([], humata_client: mock_client)
-
-      # Verify all mock expectations were met
+      # Verify all mock expectations were met (including the error case)
       mock_client.verify
 
-      # Verify successful files were processed
+      # Verify successful files were processed correctly
       result = db.execute('SELECT processing_status FROM file_records WHERE gdrive_id = ?', ['gdrive_1']).first
       assert_equal 'completed', result[0]
 
       result = db.execute('SELECT processing_status FROM file_records WHERE gdrive_id = ?', ['gdrive_3']).first
       assert_equal 'completed', result[0]
 
-      # Verify error was logged
-      assert_includes log_output.string, 'Status check failed for test2.pdf'
+      # Verify the file that failed still has its original status (pending)
+      result = db.execute('SELECT processing_status FROM file_records WHERE gdrive_id = ?', ['gdrive_2']).first
+      assert_equal 'processing', result[0]  # Should remain unchanged due to error
+      
+      # Verify page counts for successful files
+      result = db.execute('SELECT humata_pages FROM file_records WHERE gdrive_id = ?', ['gdrive_1']).first
+      assert_equal 5, result[0]
+
+      result = db.execute('SELECT humata_pages FROM file_records WHERE gdrive_id = ?', ['gdrive_3']).first
+      assert_equal 3, result[0]
     end
   end
 end

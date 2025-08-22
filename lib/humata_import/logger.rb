@@ -146,6 +146,9 @@ module HumataImport
       
       # Apply test mode configuration if in test environment
       configure_for_tests(verbose: options[:test_verbose])
+      
+      # Restore test output if it was changed (for testing)
+      restore_test_output if @test_output
     end
 
     # Returns the underlying Ruby Logger instance for direct access if needed.
@@ -158,8 +161,18 @@ module HumataImport
     # @param output [IO] The new output stream
     # @return [void]
     def change_output(output)
+      @test_output = output  # Store for later use
       @logger = ::Logger.new(output)
       set_level(@level)  # Restore the current log level
+    end
+
+    # Restores the output to the test output if it was changed
+    # @return [void]
+    def restore_test_output
+      if @test_output
+        @logger = ::Logger.new(@test_output)
+        set_level(@level)
+      end
     end
   end
 end 

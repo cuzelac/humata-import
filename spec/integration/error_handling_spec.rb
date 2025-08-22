@@ -119,15 +119,8 @@ describe 'Error Handling Integration' do
         call_count = (@call_count || 0) + 1
         @call_count = call_count
         
-        if call_count <= 9  # First 9 calls fail (3 files × 3 attempts each)
-          raise HumataImport::TransientError, 'Rate limit exceeded'
-        else
-          {
-            'id' => SecureRandom.uuid,
-            'status' => 'pending',
-            'message' => 'File queued for processing'
-          }
-        end
+        # All calls should fail with rate limiting (3 files × 4 attempts each = 12 total calls)
+        raise HumataImport::TransientError, 'Rate limit exceeded'
       end
       
       def mock_client.call_count
@@ -239,7 +232,7 @@ describe 'Error Handling Integration' do
         @call_count = call_count
         {
           'id' => SecureRandom.uuid,
-          'status' => 'completed',
+          'read_status' => 'SUCCESS',
           'message' => 'File processed successfully'
         }
       end

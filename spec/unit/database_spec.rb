@@ -57,7 +57,7 @@ describe HumataImport::Database do
         'id', 'gdrive_id', 'name', 'url', 'size', 'mime_type',
         'humata_folder_id', 'humata_id', 'upload_status', 'processing_status',
         'last_error', 'humata_verification_response', 'humata_import_response',
-        'discovered_at', 'uploaded_at', 'completed_at', 'last_checked_at'
+        'humata_pages', 'discovered_at', 'uploaded_at', 'completed_at', 'last_checked_at'
       ]
       
       assert_equal expected_columns.sort, column_names.sort

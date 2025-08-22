@@ -169,7 +169,7 @@ describe 'Full Workflow Integration' do
       def get_file_status(humata_id)
         {
           'id' => humata_id,
-          'status' => 'completed',
+          'read_status' => 'SUCCESS',
           'message' => 'File processed successfully'
         }
       end
@@ -285,11 +285,11 @@ describe 'Full Workflow Integration' do
       def get_file_status(humata_id)
         case humata_id
         when 'pending1'
-          { 'id' => humata_id, 'status' => 'completed' }
+          { 'id' => humata_id, 'read_status' => 'SUCCESS' }
         when 'pending2'
-          { 'id' => humata_id, 'status' => 'failed' }
+          { 'id' => humata_id, 'read_status' => 'FAILED' }
         when 'pending3'
-          { 'id' => humata_id, 'status' => 'processing' }
+          { 'id' => humata_id, 'read_status' => 'PROCESSING' }
         end
       end
       
