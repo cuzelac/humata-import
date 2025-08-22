@@ -153,5 +153,13 @@ module HumataImport
     def to_logger
       @logger
     end
+
+    # Changes the output stream for testing purposes.
+    # @param output [IO] The new output stream
+    # @return [void]
+    def change_output(output)
+      @logger = ::Logger.new(output)
+      set_level(@level)  # Restore the current log level
+    end
   end
 end 
