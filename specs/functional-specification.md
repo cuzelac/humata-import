@@ -188,10 +188,13 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 
 #### 3.4.1 Functionality
 - Poll Humata.ai API for file processing status
-- Update database with current status
+- Update database with current processing status and metadata
 - Continue polling until completion or timeout
 - Handle batch processing for efficiency
 - Provide real-time progress updates
+- Store Humata processing metadata 
+    - number of pages is stored in `humata_pages` field
+    - Full API response is stored in `humata_verification_response` field
 
 #### 3.4.2 Options
 - `--poll-interval N`: Seconds between status checks (default: 10)
@@ -205,6 +208,16 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - **Timeouts**: Graceful timeout with status summary
 - **Network Issues**: Retry individual status checks
 - **Partial Failures**: Continue monitoring remaining files
+
+#### 3.4.4 Enhanced Status Tracking
+- **Processing Status Updates**: Update `processing_status` field based on Humata API response
+- **Page Count Storage**: Store `humata_pages` field when `read_status = 'SUCCESS'`
+- **Metadata Preservation**: Store complete Humata API response for debugging and analysis
+- **Status Mapping**: Map Humata `read_status` values to internal `processing_status` values:
+  - **PENDING** → `pending`
+  - **PROCESSING** → `processing`
+  - **SUCCESS** → `completed`
+  - **FAILED** → `failed`
 
 ### 3.5 Run Command (`lib/humata_import/commands/run.rb`)
 - **Purpose**: Execute complete workflow (discover + upload + verify)
@@ -318,6 +331,7 @@ CREATE TABLE file_records (
   last_error TEXT,
   humata_verification_response TEXT,
   humata_import_response TEXT,
+  humata_pages INTEGER,
   discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   uploaded_at DATETIME,
   completed_at DATETIME,
@@ -345,6 +359,12 @@ CREATE TABLE file_records (
 - `processing`: Being processed by Humata
 - `completed`: Processing complete
 - `failed`: Processing failed
+
+
+
+#### Humata Pages
+- `null`: Number of pages not yet determined
+- `INTEGER`: Number of pages processed by Humata (when read_status = 'SUCCESS')
 
 ## 6. Utility Components
 
@@ -654,6 +674,14 @@ humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-dela
 - **Resume Points**: User-configurable checkpoint intervals for long-running operations
 - **Advanced Retry Strategies**: Custom retry policies and adaptive backoff
 - **Retry Analytics**: Detailed retry success rate analysis and optimization
+
+### 13.2 Enhanced Verify Command Implementation
+- **Database Schema Updates**: Add `humata_pages` field for storing page count
+- **Status Mapping Logic**: Implement mapping between Humata API responses and internal status
+- **Metadata Storage**: Store complete Humata API responses for enhanced debugging
+- **Processing Status Updates**: Ensure `processing_status` field is properly updated
+- **Page Count Tracking**: Store number of pages when Humata processing completes
+- **API Response Parsing**: Handle new Humata API response format with additional fields
 
 ### 13.2 Scalability Improvements
 - **Distributed Processing**: Multi-node processing capabilities

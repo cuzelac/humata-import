@@ -122,9 +122,16 @@ Authorization: Bearer {api_key}
 // Status Response
 {
   "id": "humata-file-id",
-  "status": "completed|processing|failed",
+  "name": "example.pdf",
+  "organization_id": "fcf6c954-ba68-4e39-a7b5-960dc8274ec0",
   "created_at": "2024-01-01T00:00:00Z",
-  "updated_at": "2024-01-01T00:00:00Z"
+  "updated_at": "2024-01-01T00:00:00Z",
+  "number_of_pages": 1,
+  "folder_id": "6c702c82-bb8a-4274-8cb6-074e0bf78084",
+  "read_status": "SUCCESS",
+  "created_by": "07f5bfc7-72c9-40b7-8151-dcfc2f9613dc",
+  "from_url": "text",
+  "file_type": "PDF"
 }
 ```
 
@@ -146,6 +153,7 @@ CREATE TABLE file_records (
   last_error TEXT,
   humata_verification_response TEXT,
   humata_import_response TEXT,
+  humata_pages INTEGER,
   discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   uploaded_at DATETIME,
   completed_at DATETIME,
@@ -161,11 +169,16 @@ CREATE INDEX idx_files_humata_id ON file_records(humata_id);
 ```
 
 ### 3.3 Data Types and Constraints
-- **TEXT Fields**: URLs, IDs, names, responses (JSON strings)
-- **INTEGER Fields**: File sizes, timestamps
+- **TEXT Fields**: URLs, IDs, names, responses (JSON strings), read status
+- **INTEGER Fields**: File sizes, timestamps, page counts
 - **DATETIME Fields**: ISO 8601 format timestamps
 - **UNIQUE Constraints**: `gdrive_id` prevents duplicate discoveries
 - **DEFAULT Values**: `upload_status = 'pending'`, `discovered_at = CURRENT_TIMESTAMP`
+
+### 3.4 New Fields for Enhanced Status Tracking
+- **`humata_pages`**: INTEGER field storing the number of pages processed by Humata
+- **Status Mapping**: Internal `processing_status` field maps to Humata `read_status` values
+- **Data Consistency**: Page count only populated when `read_status = 'SUCCESS'`
 
 ## 4. Class Specifications
 
@@ -350,6 +363,10 @@ end
 - Timeout protection
 - Progress reporting
 - Graceful handling of partial failures
+- Enhanced status tracking with Humata metadata
+- Processing status updates based on Humata read_status
+- Page count storage when processing completes
+- Complete API response preservation for debugging
 
 ### 5.4 Run Command
 ```ruby
