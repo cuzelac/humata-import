@@ -543,6 +543,7 @@ end
 - **Integration Tests**: All API interactions
 - **Error Scenarios**: All error handling paths
 - **Performance Tests**: Load testing with large datasets
+- **Schema Update Tests**: Test schema update script functionality
 
 ## 10. Deployment Specifications
 
@@ -570,6 +571,17 @@ git clone <repository>
 cd humata-import
 bundle install
 rake install
+```
+
+### 10.2.1 Schema Update Script
+The schema update script is included in the `scripts/` directory and can be run directly:
+
+```bash
+# Make script executable (optional)
+chmod +x scripts/update_schema.rb
+
+# Run schema update
+ruby scripts/update_schema.rb [database_path]
 ```
 
 ### 10.3 Environment Setup
@@ -645,21 +657,131 @@ def validate_configuration
 end
 ```
 
-## 14. Future Technical Enhancements
+## 14. Database Schema Management
 
-### 14.1 Scalability Improvements
+### 14.1 Schema Update Approach
+The project uses a **simple script-based approach** for database schema updates rather than a complex migration framework. This decision was made to:
+
+- **Minimize Complexity**: Avoid over-engineering for a tool that primarily uses SQLite
+- **Reduce Dependencies**: No external migration gems or complex infrastructure
+- **Faster Implementation**: Get schema updates working immediately without refactoring
+- **Lower Risk**: No changes to existing working code patterns
+- **Easier Maintenance**: Simple Ruby script that's easy to understand and modify
+
+#### 14.1.1 Decision Rationale
+After evaluating both approaches, the script-based solution was chosen because:
+
+1. **Immediate Need**: The tool needed schema updates working quickly, not in weeks
+2. **Codebase Impact**: Full migration framework would require refactoring ~50+ database calls
+3. **Risk Assessment**: Large refactoring could introduce bugs in working code
+4. **Team Velocity**: Focus on new features rather than rewriting existing infrastructure
+5. **Future Flexibility**: Script approach can be replaced with migration framework later if needed
+
+The script approach provides 80% of the benefits with 20% of the complexity, making it the right choice for the current project stage.
+
+### 14.2 Schema Update Script
+```ruby
+# scripts/update_schema.rb
+class SchemaUpdater
+  def run
+    # 1. Create backup of existing database
+    # 2. Detect missing columns
+    # 3. Add missing columns safely
+    # 4. Verify final schema
+    # 5. Clean up backup on success
+  end
+  
+  private
+  
+  def add_missing_column(column_name, column_type)
+    # Safe column addition with existence checking
+  end
+  
+  def create_backup
+    # Automatic backup before any changes
+  end
+end
+```
+
+#### 14.2.1 Script Features
+- **Automatic Backup**: Creates timestamped backup before any schema changes
+- **Column Detection**: Uses `PRAGMA table_info()` to check existing schema
+- **Safe Updates**: Only adds missing columns using `ALTER TABLE ADD COLUMN`
+- **Error Handling**: Restores from backup if any operation fails
+- **Idempotent**: Can be run multiple times without side effects
+- **Schema Verification**: Confirms final schema matches expectations
+
+#### 14.2.2 Usage Examples
+```bash
+# Update default database
+ruby scripts/update_schema.rb
+
+# Update specific database
+ruby scripts/update_schema.rb /path/to/database.db
+
+# Script output example
+# 🔧 Updating database schema: ./import_session.db
+# 💾 Created backup: ./import_session.db.backup.1703123456
+# 📋 Current columns: id, gdrive_id, name, url, size, mime_type, ...
+# ➕ Adding column 'humata_pages' (INTEGER)
+# ✅ Successfully added column 'humata_pages'
+# ✅ Schema update completed! Applied 1 updates.
+# 🧹 Cleaned up backup file
+```
+
+### 14.3 Schema Update Process
+1. **Backup Creation**: Automatic backup with timestamp before any changes
+2. **Column Detection**: Check existing schema against expected schema
+3. **Safe Updates**: Add only missing columns using `ALTER TABLE ADD COLUMN`
+4. **Verification**: Confirm final schema matches expectations
+5. **Cleanup**: Remove backup file on successful completion
+6. **Error Handling**: Restore from backup if any step fails
+
+### 14.4 Current Schema Updates
+The following schema updates have been implemented:
+
+#### 14.4.1 Add humata_pages Column
+- **Purpose**: Store the number of pages processed by Humata.ai
+- **Type**: INTEGER field
+- **Usage**: Populated when `read_status = 'SUCCESS'` from Humata API
+- **Implementation**: Added to both `database.rb` schema initialization and update script
+- **Backward Compatibility**: Existing databases will get this column via update script
+
+#### 14.4.2 Schema Synchronization
+- **Database Class**: Updated to include `humata_pages` in `initialize_schema`
+- **Update Script**: Automatically detects and adds missing columns
+- **Test Coverage**: Existing tests continue to work with updated schema
+- **No Breaking Changes**: All existing functionality preserved
+
+### 14.5 Benefits of Script Approach
+- **Idempotent**: Can be run multiple times safely
+- **Backup Safety**: Automatic backup and restore on failure
+- **Simple**: Easy to understand and modify
+- **Fast**: No complex migration infrastructure overhead
+- **Reliable**: Direct SQL operations with error handling
+
+### 14.6 Future Considerations
+While the script approach meets current needs, future versions may consider:
+- **Migration Framework**: If the tool grows significantly in complexity
+- **Database Support**: If moving beyond SQLite to PostgreSQL/MySQL
+- **Team Scaling**: If multiple developers need to manage schema changes
+- **Automation**: If schema updates need to be part of deployment pipelines
+
+## 15. Future Technical Enhancements
+
+### 15.1 Scalability Improvements
 - **Database Scaling**: Support for PostgreSQL/MySQL
 - **Queue Processing**: Background job processing
 - **Distributed Processing**: Multi-node processing
 - **Caching Layer**: Redis-based caching
 
-### 14.2 API Enhancements
+### 15.2 API Enhancements
 - **Bulk Operations**: Batch API endpoints
 - **Webhook Support**: Real-time notifications
 - **Advanced Filtering**: Complex query support
 - **Streaming Uploads**: Large file support
 
-### 14.3 Performance Optimizations
+### 15.3 Performance Optimizations
 - **Connection Pooling**: Enhanced connection management
 - **Parallel Processing**: Multi-threaded operations
 - **Memory Optimization**: Reduced memory footprint

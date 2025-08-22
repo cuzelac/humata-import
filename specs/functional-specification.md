@@ -587,6 +587,25 @@ rake install
 - **Retry Configuration**: Set retry limits and backoff delays
 - **Error Handling**: Configure which errors should trigger retries
 
+### 12.2.1 Database Schema Updates
+When upgrading the tool or working with existing databases, use the schema update script:
+
+```bash
+# Update the default database
+ruby scripts/update_schema.rb
+
+# Update a specific database
+ruby scripts/update_schema.rb /path/to/your/database.db
+
+# The script will:
+# 1. Create a backup of your database
+# 2. Add any missing columns safely
+# 3. Verify the final schema
+# 4. Clean up the backup on success
+```
+
+**Note**: The schema update script is safe to run multiple times and will only add missing columns without modifying existing data.
+
 ### 12.3 Monitoring
 - **Progress Tracking**: Real-time status monitoring
 - **Error Monitoring**: Comprehensive error logging
@@ -594,6 +613,14 @@ rake install
 - **Resource Monitoring**: Monitor disk space and memory usage
 - **Retry Monitoring**: Track retry attempts and success rates
 - **Backoff Analysis**: Monitor effectiveness of exponential backoff
+
+### 12.4 Database Schema Management
+- **Schema Updates**: Use `scripts/update_schema.rb` for database schema updates
+- **Automatic Backups**: Script creates timestamped backups before any changes
+- **Safe Operations**: Only adds missing columns, never modifies existing data
+- **Idempotent**: Can be run multiple times safely
+- **Error Recovery**: Automatic restore from backup if schema update fails
+- **Usage**: `ruby scripts/update_schema.rb [database_path]`
 
 ## 12.4 Retry Configuration Examples
 
@@ -682,6 +709,14 @@ humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-dela
 - **Processing Status Updates**: Ensure `processing_status` field is properly updated
 - **Page Count Tracking**: Store number of pages when Humata processing completes
 - **API Response Parsing**: Handle new Humata API response format with additional fields
+
+### 13.3 Database Schema Management
+- **Schema Update Script**: Simple script-based approach for database schema updates
+- **Idempotent Operations**: Script can be run multiple times safely
+- **Backup and Recovery**: Automatic backup creation before schema changes
+- **Column Detection**: Automatic detection of missing columns
+- **Schema Validation**: Verification of final schema structure
+- **No Migration Framework**: Deliberate choice to avoid complex migration infrastructure
 
 ### 13.2 Scalability Improvements
 - **Distributed Processing**: Multi-node processing capabilities

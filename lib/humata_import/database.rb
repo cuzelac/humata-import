@@ -52,6 +52,7 @@ module HumataImport
           last_error TEXT, -- TODO: Rename to 'upload_error' - stores error message when upload fails, cleared on successful upload
           humata_verification_response TEXT,
           humata_import_response TEXT,
+          humata_pages INTEGER,
           discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           uploaded_at DATETIME,
           completed_at DATETIME,

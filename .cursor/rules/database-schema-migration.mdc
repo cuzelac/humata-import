@@ -1,174 +1,131 @@
 ---
-description: Database Schema Migration Rule
+description: Database Schema Update Rule
 globs: *.rb
 alwaysApply: false
 ---
 
 ## Description
-This rule ensures that any database schema changes are accompanied by migration scripts to update existing databases, maintaining data consistency and enabling seamless upgrades.
+This rule ensures that any database schema changes are accompanied by a schema update script to bring existing databases up to date, maintaining data consistency and enabling seamless upgrades. The project uses a simple script-based approach rather than a complex migration framework.
 
 ## Rule
 When updating the database schema:
 
-1. **Migration Script Requirement**
-   - MUST create a migration script for any schema changes
-   - MUST place migration scripts in `scripts/migrations/` directory
-   - MUST use sequential numbering (001_, 002_, etc.) for migration files
-   - MUST include both up and down migration methods
-   - MUST be idempotent (safe to run multiple times)
+1. **Schema Update Script Requirement**
+   - MUST create or update the schema update script for any schema changes
+   - MUST place the script in `scripts/update_schema.rb`
+   - MUST ensure the script is idempotent (safe to run multiple times)
+   - MUST update both the script and `lib/humata_import/database.rb` schema initialization
 
-2. **Migration Script Structure**
-   - MUST inherit from `HumataImport::Migration` base class
-   - MUST implement `up` method for applying changes
-   - MUST implement `down` method for rolling back changes
-   - MUST include descriptive comments explaining the changes
-   - MUST handle existing data appropriately
+2. **Schema Update Script Structure**
+   - MUST create automatic backups before any schema changes
+   - MUST detect existing schema state before making changes
+   - MUST only add missing columns, never modify existing data
+   - MUST include error handling with automatic backup restoration
+   - MUST verify final schema matches expectations
 
-3. **Migration Execution**
-   - MUST provide a way to run migrations via CLI command
-   - MUST support running individual migrations or all pending migrations
-   - MUST track migration status in database
-   - MUST be idempotent (safe to run multiple times)
+3. **Schema Update Process**
+   - MUST create timestamped backup before any changes
+   - MUST check for existing columns before adding new ones
+   - MUST use safe SQL operations (e.g., `ALTER TABLE ADD COLUMN`)
+   - MUST provide clear progress feedback and error messages
+   - MUST clean up backup files on successful completion
 
 4. **Backward Compatibility**
-   - MUST ensure migrations can be run on existing databases
+   - MUST ensure schema updates can be run on existing databases
    - MUST handle missing columns gracefully
-   - MUST provide rollback capability for failed migrations
-   - MUST preserve existing data during schema updates
+   - MUST preserve all existing data during schema updates
+   - MUST not break existing functionality
 
 5. **Idempotency**
    - MUST be safe to run multiple times without side effects
-   - MUST check for existing state before making changes
-   - MUST use conditional logic (e.g., `IF NOT EXISTS`, `UNLESS EXISTS`)
-   - MUST handle partial failures gracefully
+   - MUST check existing state before making changes
+   - MUST use conditional logic to avoid duplicate operations
+   - MUST handle partial failures gracefully with backup restoration
 
 ## Implementation Guidelines
 
-### Migration File Naming
+### Schema Update Script Location
 ```
-scripts/migrations/
-├── 001_add_humata_pages.rb
-├── 002_add_new_field.rb
-└── 003_update_indexes.rb
+scripts/
+└── update_schema.rb          # Single script for all schema updates
 ```
 
-### Migration Class Structure
+### Schema Update Script Structure
 ```ruby
-module HumataImport
-  module Migrations
-    class AddHumataPages < Migration
-      def up
-        # Add new column if it doesn't exist
-        unless column_exists?(:file_records, :humata_pages)
-          add_column :file_records, :humata_pages, :integer
-        end
-      end
-
-      def down
-        # Remove column if it exists
-        if column_exists?(:file_records, :humata_pages)
-          remove_column :file_records, :humata_pages
-        end
-      end
-    end
+# scripts/update_schema.rb
+class SchemaUpdater
+  def run
+    # 1. Create backup of existing database
+    # 2. Detect missing columns
+    # 3. Add missing columns safely
+    # 4. Verify final schema
+    # 5. Clean up backup on success
+  end
+  
+  private
+  
+  def add_missing_column(column_name, column_type)
+    # Safe column addition with existence checking
+  end
+  
+  def create_backup
+    # Automatic backup before any changes
   end
 end
 ```
 
-### Migration Base Class
+### Schema Update Process
 ```ruby
-module HumataImport
-  class Migration
-    attr_reader :db
-
-    def initialize(db)
-      @db = db
-    end
-
-    def up
-      raise NotImplementedError, "Subclasses must implement #up"
-    end
-
-    def down
-      raise NotImplementedError, "Subclasses must implement #down"
-    end
-
-    protected
-
-    def column_exists?(table, column)
-      # Implementation for checking column existence
-    end
-
-    def add_column(table, column, type)
-      # Implementation for adding columns
-    end
-
-    def remove_column(table, column)
-      # Implementation for removing columns
-    end
-  end
-end
+# When adding a new column:
+# 1. Update lib/humata_import/database.rb initialize_schema method
+# 2. Update scripts/update_schema.rb to detect and add the column
+# 3. Test the script on existing databases
+# 4. Document the change in specifications
 ```
 
-### CLI Migration Command
-```ruby
-class Migrate < Base
-  def run(args)
-    # Parse migration options
-    # Run pending migrations
-    # Provide status and rollback options
-  end
-end
+### Usage
+```bash
+# Update default database
+ruby scripts/update_schema.rb
+
+# Update specific database
+ruby scripts/update_schema.rb /path/to/database.db
 ```
 
 ## Examples
 
-### ✅ Good: Complete Migration Implementation
+### ✅ Good: Complete Schema Update Implementation
 ```ruby
-# scripts/migrations/001_add_humata_pages.rb
-module HumataImport
-  module Migrations
-    class AddHumataPages < Migration
-      def up
-        # Add new column if it doesn't exist (idempotent)
-        unless column_exists?(:file_records, :humata_pages)
-          @db.execute(<<-SQL)
-            ALTER TABLE file_records 
-            ADD COLUMN humata_pages INTEGER
-          SQL
-          logger.info "Added humata_pages column to file_records table"
-        else
-          logger.info "humata_pages column already exists in file_records table"
-        end
-      end
+# 1. Update lib/humata_import/database.rb
+def self.initialize_schema(db_path)
+  db = connect(db_path)
+  db.execute_batch <<-SQL
+    CREATE TABLE IF NOT EXISTS file_records (
+      # ... existing columns ...
+      humata_pages INTEGER,  # New column added
+      # ... remaining columns ...
+    );
+  SQL
+  db.close
+end
 
-      def down
-        # Remove column if it exists (idempotent)
-        if column_exists?(:file_records, :humata_pages)
-          @db.execute(<<-SQL)
-            ALTER TABLE file_records 
-            DROP COLUMN humata_pages
-          SQL
-          logger.info "Removed humata_pages column from file_records table"
-        else
-          logger.info "humata_pages column does not exist in file_records table"
-        end
-      end
-
-      private
-
-      def column_exists?(table, column)
-        columns = @db.execute("PRAGMA table_info(#{table})").map { |col| col[1] }
-        columns.include?(column.to_s)
-      end
-    end
+# 2. Update scripts/update_schema.rb
+def add_missing_column(column_name, column_type)
+  if column_exists?(column_name)
+    puts "✓ Column '#{column_name}' already exists"
+    return 0
   end
+
+  puts "➕ Adding column '#{column_name}' (#{column_type})..."
+  @db.execute("ALTER TABLE file_records ADD COLUMN #{column_name} #{column_type}")
+  puts "✅ Successfully added column '#{column_name}'"
+  return 1
 end
 ```
 
-### ❌ Bad: Missing Migration Script
+### ❌ Bad: Missing Schema Update
 ```ruby
-# Direct schema change without migration
+# Direct schema change without updating both files
 class Verify < Base
   def run(args)
     # This would fail on existing databases without the new column
@@ -179,24 +136,38 @@ end
 
 ## Benefits
 - **Data Consistency**: Ensures existing databases can be upgraded
-- **Rollback Safety**: Provides ability to undo schema changes
+- **Backup Safety**: Automatic backup creation and restoration on failure
 - **Production Safety**: Enables safe schema updates in production
-- **Version Control**: Tracks schema evolution over time
+- **Simplicity**: Easy to understand and maintain without complex infrastructure
 - **Team Collaboration**: Multiple developers can apply schema changes consistently
+- **Lower Risk**: No complex refactoring of existing working code
 
 ## Enforcement
-- Code review must reject schema changes without migration scripts
-- All database schema modifications must include corresponding migrations
-- Migration scripts must be tested on existing database instances
-- Rollback functionality must be verified before deployment
+- Code review must reject schema changes without updating both `database.rb` and `update_schema.rb`
+- All database schema modifications must include corresponding schema update script changes
+- Schema update script must be tested on existing database instances
+- Backup and restore functionality must be verified before deployment
 
 ## Exceptions
-- Initial database creation can skip migrations
-- Test-only schema changes can skip migrations
-- When in doubt, create a migration script
+- Initial database creation can skip schema update script
+- Test-only schema changes can skip schema update script
+- When in doubt, update both `database.rb` and `update_schema.rb`
 
 ## Notes
 - This rule complements `cursor-rules-location` for rule organization
-- Follows Ruby database migration best practices
+- Follows Ruby database schema update best practices
 - Ensures consistent schema management across the project
 - Applies to all Ruby files that modify database schemas
+- The script-based approach was chosen over migration framework for simplicity and immediate value
+
+## Decision Rationale
+
+The project chose a **simple script-based approach** over a complex migration framework for the following reasons:
+
+1. **Immediate Need**: Schema updates were needed quickly, not in weeks
+2. **Codebase Impact**: Full migration framework would require refactoring ~50+ database calls
+3. **Risk Assessment**: Large refactoring could introduce bugs in working code
+4. **Team Velocity**: Focus on new features rather than rewriting existing infrastructure
+5. **Future Flexibility**: Script approach can be replaced with migration framework later if needed
+
+The script approach provides 80% of the benefits with 20% of the complexity, making it the right choice for the current project stage.
