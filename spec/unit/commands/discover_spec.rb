@@ -219,5 +219,32 @@ describe HumataImport::Commands::Discover do
       
       gdrive_client.verify
     end
+
+    it 'ensures idempotency by skipping existing files' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'test1.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        }
+      ]
+      
+      # First run
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
+      
+      # Second run with same files
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
+
+      # Should only have one record due to idempotency
+      records = command.db.execute("SELECT COUNT(*) FROM file_records")
+      assert_equal 1, records.first[0]
+      
+      gdrive_client.verify
+    end
   end
 end 

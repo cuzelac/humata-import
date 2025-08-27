@@ -62,5 +62,15 @@ module HumataImport
     def self.all(db)
       db.execute("SELECT * FROM #{TABLE}")
     end
+
+    # Checks if a file record exists by gdrive_id.
+    #
+    # @param db [SQLite3::Database] Database connection
+    # @param gdrive_id [String] Google Drive file ID
+    # @return [Boolean] True if the record exists, false otherwise
+    def self.exists?(db, gdrive_id)
+      result = db.get_first_value("SELECT 1 FROM #{TABLE} WHERE gdrive_id = ? LIMIT 1", [gdrive_id])
+      !result.nil?
+    end
   end
 end

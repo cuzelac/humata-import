@@ -54,9 +54,41 @@ module HumataImport
         parser.order!(args)
         gdrive_url = args.shift
         raise ArgumentError, 'Missing Google Drive folder URL' unless gdrive_url
+        
+        # Provide timeout guidance
+        unless @options[:quiet]
+          if options[:timeout] < 60
+            puts "⚠️  Short timeout (#{options[:timeout]}s) - may not complete for large folders"
+          elsif options[:timeout] > 1800
+            puts "ℹ️  Extended timeout (#{options[:timeout]}s) - suitable for very large folders"
+          end
+        end
+        
         client = gdrive_client || HumataImport::Clients::GdriveClient.new(timeout: options[:timeout])
         files = client.list_files(gdrive_url, options[:recursive], options[:max_files])
-        files.each do |file|
+        
+        # Initialize counters for progress reporting
+        total_files = files.size
+        skipped_files = 0
+        added_files = 0
+        
+        puts "🔍 Discovering files in Google Drive folder..." unless @options[:quiet]
+        puts "📁 Found #{total_files} files to process" if @options[:verbose] && !@options[:quiet]
+        
+        # Provide guidance for large folders
+        if total_files > 1000 && !@options[:quiet]
+          puts "⚠️  Large folder detected (#{total_files} files)"
+          puts "   Consider using --max-files to limit discovery if needed"
+          puts "   Current timeout: #{options[:timeout]} seconds"
+        end
+        
+        files.each_with_index do |file, index|
+          if HumataImport::FileRecord.exists?(db, file[:id])
+            skipped_files += 1
+            puts "⏭️  Skipping existing file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
+            next
+          end
+          
           HumataImport::FileRecord.create(
             db,
             gdrive_id: file[:id],
@@ -65,6 +97,23 @@ module HumataImport
             size: file[:size],
             mime_type: file[:mimeType]
           )
+          added_files += 1
+          
+          # Progress reporting
+          if @options[:verbose] && !@options[:quiet]
+            puts "✅ Added file #{index + 1}/#{total_files}: #{file[:name]}"
+          elsif !@options[:quiet] && (index + 1) % 10 == 0
+            puts "📊 Processed #{index + 1}/#{total_files} files..."
+          end
+        end
+        
+        # Final summary
+        unless @options[:quiet]
+          puts "\n🎯 Discovery Summary:"
+          puts "   Total files found: #{total_files}"
+          puts "   New files added: #{added_files}"
+          puts "   Existing files skipped: #{skipped_files}"
+          puts "   Database now contains: #{HumataImport::FileRecord.all(db).size} total files"
         end
       end
     end
