@@ -133,7 +133,7 @@ module HumataImport
             
             response = @service.list_files(
               q: "'#{folder_id}' in parents",
-              fields: 'nextPageToken, files(id, name, mimeType, webContentLink, size)',
+              fields: 'nextPageToken, files(id, name, mimeType, webContentLink, size, createdTime, modifiedTime)',
               page_token: page_token,
               supports_all_drives: true,
               include_items_from_all_drives: true,
@@ -160,7 +160,9 @@ module HumataImport
                     name: file.name,
                     mimeType: file.mime_type,
                     webContentLink: file.web_content_link,
-                    size: file.size
+                    size: file.size,
+                    createdTime: file.created_time,
+                    modifiedTime: file.modified_time
                   }
                   
                   # Check max files limit

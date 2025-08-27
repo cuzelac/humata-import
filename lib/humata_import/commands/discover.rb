@@ -40,7 +40,9 @@ module HumataImport
         options = {
           recursive: true,
           max_files: nil,
-          timeout: DEFAULT_TIMEOUT
+          timeout: DEFAULT_TIMEOUT,
+          duplicate_strategy: 'skip',
+          show_duplicates: false
         }
         parser = OptionParser.new do |opts|
           opts.banner = "Usage: humata-import discover <gdrive-url> [options]"
@@ -48,6 +50,8 @@ module HumataImport
           opts.on('--no-recursive', 'Do not crawl subfolders') { options[:recursive] = false }
           opts.on('--max-files N', Integer, 'Limit number of files to discover') { |v| options[:max_files] = v }
           opts.on('--timeout SECONDS', Integer, 'Discovery timeout (default: 300s)') { |v| options[:timeout] = v }
+          opts.on('--duplicate-strategy STRATEGY', %w[skip upload replace], 'How to handle duplicates: skip, upload, or replace (default: skip)') { |v| options[:duplicate_strategy] = v }
+          opts.on('--show-duplicates', 'Show detailed duplicate information') { options[:show_duplicates] = true }
           opts.on('-v', '--verbose', 'Enable verbose output') { @options[:verbose] = true }
           opts.on('-q', '--quiet', 'Suppress non-essential output') { @options[:quiet] = true }
         end
@@ -71,6 +75,7 @@ module HumataImport
         total_files = files.size
         skipped_files = 0
         added_files = 0
+        duplicate_files = 0
         
         puts "🔍 Discovering files in Google Drive folder..." unless @options[:quiet]
         puts "📁 Found #{total_files} files to process" if @options[:verbose] && !@options[:quiet]
@@ -83,20 +88,49 @@ module HumataImport
         end
         
         files.each_with_index do |file, index|
+          # Check for existing file by gdrive_id first
           if HumataImport::FileRecord.exists?(db, file[:id])
             skipped_files += 1
             puts "⏭️  Skipping existing file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
             next
           end
           
-          HumataImport::FileRecord.create(
+          # Create file record with enhanced metadata
+          file_record = HumataImport::FileRecord.create(
             db,
             gdrive_id: file[:id],
             name: file[:name],
             url: file[:webContentLink],
             size: file[:size],
-            mime_type: file[:mimeType]
+            mime_type: file[:mimeType],
+            created_time: file[:createdTime],
+            modified_time: file[:modifiedTime]
           )
+          
+          # Check if this is a duplicate of an existing file
+          file_hash = HumataImport::FileRecord.generate_file_hash(file[:size], file[:name], file[:mimeType])
+          duplicate_info = HumataImport::FileRecord.find_duplicate(db, file_hash, file[:id])
+          
+          if duplicate_info[:duplicate_found]
+            duplicate_files += 1
+            puts "🔄 Duplicate detected: #{file[:name]} (same as: #{duplicate_info[:duplicate_name]})" if @options[:verbose] && !@options[:quiet]
+            
+            # Handle duplicate based on strategy
+            case options[:duplicate_strategy]
+            when 'skip'
+              puts "⏭️  Skipping duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
+              next
+            when 'replace'
+              puts "🔄 Replacing duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
+              # Update the duplicate_of_gdrive_id for the new file
+              db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
+            when 'upload'
+              puts "📤 Will upload duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
+              # Mark as duplicate but still upload
+              db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
+            end
+          end
+          
           added_files += 1
           
           # Progress reporting

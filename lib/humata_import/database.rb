@@ -53,6 +53,10 @@ module HumataImport
           humata_verification_response TEXT,
           humata_import_response TEXT,
           humata_pages INTEGER,
+          created_time DATETIME,
+          modified_time DATETIME,
+          duplicate_of_gdrive_id TEXT,
+          file_hash TEXT,
           discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           uploaded_at DATETIME,
           completed_at DATETIME,
@@ -61,6 +65,9 @@ module HumataImport
         CREATE INDEX IF NOT EXISTS idx_files_status ON file_records(upload_status);
         CREATE INDEX IF NOT EXISTS idx_files_gdrive_id ON file_records(gdrive_id);
         CREATE INDEX IF NOT EXISTS idx_files_humata_id ON file_records(humata_id);
+        CREATE INDEX IF NOT EXISTS idx_files_duplicate_detection ON file_records(size, name, mime_type);
+        CREATE INDEX IF NOT EXISTS idx_files_file_hash ON file_records(file_hash);
+        CREATE INDEX IF NOT EXISTS idx_files_duplicate_of ON file_records(duplicate_of_gdrive_id);
       SQL
       db.close
     end

@@ -43,6 +43,15 @@ class SchemaUpdater
       # Apply updates
       updates_applied = 0
       updates_applied += add_missing_column('humata_pages', 'INTEGER')
+      updates_applied += add_missing_column('created_time', 'DATETIME')
+      updates_applied += add_missing_column('modified_time', 'DATETIME')
+      updates_applied += add_missing_column('duplicate_of_gdrive_id', 'TEXT')
+      updates_applied += add_missing_column('file_hash', 'TEXT')
+      
+      # Add new indexes for duplicate detection
+      updates_applied += add_missing_index('idx_files_duplicate_detection', 'size, name, mime_type')
+      updates_applied += add_missing_index('idx_files_file_hash', 'file_hash')
+      updates_applied += add_missing_index('idx_files_duplicate_of', 'duplicate_of_gdrive_id')
       
       if updates_applied > 0
         puts "✅ Schema update completed! Applied #{updates_applied} updates."
@@ -118,6 +127,28 @@ class SchemaUpdater
     end
   end
 
+  def add_missing_index(index_name, columns)
+    if index_exists?(index_name)
+      puts "✓ Index '#{index_name}' already exists"
+      return 0
+    end
+
+    puts "➕ Adding index '#{index_name}' on columns: #{columns}..."
+    
+    begin
+      @db.execute("CREATE INDEX #{index_name} ON file_records (#{columns})")
+      puts "✅ Successfully added index '#{index_name}'"
+      return 1
+    rescue SQLite3::Exception => e
+      puts "❌ Failed to add index '#{index_name}': #{e.message}"
+      raise
+    end
+  end
+
+  def index_exists?(index_name)
+    @db.execute("PRAGMA index_list(file_records)").any? { |row| row[1] == index_name }
+  end
+
   def verify_schema
     puts "\n🔍 Verifying final schema..."
     
@@ -125,7 +156,8 @@ class SchemaUpdater
       'id', 'gdrive_id', 'name', 'url', 'size', 'mime_type',
       'humata_folder_id', 'humata_id', 'upload_status', 'processing_status',
       'last_error', 'humata_verification_response', 'humata_import_response',
-      'humata_pages', 'discovered_at', 'uploaded_at', 'completed_at', 'last_checked_at'
+      'humata_pages', 'created_time', 'modified_time', 'duplicate_of_gdrive_id', 'file_hash',
+      'discovered_at', 'uploaded_at', 'completed_at', 'last_checked_at'
     ]
     
     current_columns = get_current_columns
