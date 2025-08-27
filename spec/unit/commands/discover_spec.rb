@@ -246,5 +246,295 @@ describe HumataImport::Commands::Discover do
       
       gdrive_client.verify
     end
+
+    it 'collects enhanced metadata including created and modified times' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'test1.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf',
+          createdTime: '2024-01-01T10:00:00Z',
+          modifiedTime: '2024-01-01T11:00:00Z'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # Verify enhanced metadata was stored
+      records = command.db.execute("SELECT created_time, modified_time FROM file_records WHERE gdrive_id = 'file1'")
+      record = records.first
+      
+      assert_equal '2024-01-01T10:00:00Z', record[0] # created_time
+      assert_equal '2024-01-01T11:00:00Z', record[1] # modified_time
+      
+      gdrive_client.verify
+    end
+
+    it 'detects duplicates using file size + name + mime_type combination' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf',
+          createdTime: '2024-01-01T10:00:00Z',
+          modifiedTime: '2024-01-01T11:00:00Z'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/pdf',
+          createdTime: '2024-01-02T10:00:00Z',
+          modifiedTime: '2024-01-02T11:00:00Z'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # With default skip strategy, only the first file should be added
+      records = command.db.execute("SELECT gdrive_id, duplicate_of_gdrive_id, file_hash FROM file_records ORDER BY discovered_at")
+      
+      assert_equal 1, records.size
+      
+      # First file (original) should be added
+      assert_equal 'file1', records[0][0] # gdrive_id
+      assert_nil records[0][1] # duplicate_of_gdrive_id should be nil
+      assert records[0][2] # file_hash should be set
+      
+      gdrive_client.verify
+    end
+
+    it 'handles duplicate strategy skip (default)' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['--duplicate-strategy', 'skip', 'https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # With skip strategy, only the first file should be added
+      records = command.db.execute("SELECT COUNT(*) FROM file_records")
+      assert_equal 1, records.first[0]
+      
+      gdrive_client.verify
+    end
+
+    it 'handles duplicate strategy upload' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['--duplicate-strategy', 'upload', 'https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # With upload strategy, both files should be added
+      records = command.db.execute("SELECT COUNT(*) FROM file_records")
+      assert_equal 2, records.first[0]
+      
+      # Second file should be marked as duplicate but still added
+      duplicate_record = command.db.execute("SELECT duplicate_of_gdrive_id FROM file_records WHERE gdrive_id = 'file2'")
+      assert_equal 'file1', duplicate_record.first[0]
+      
+      gdrive_client.verify
+    end
+
+    it 'handles duplicate strategy replace' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['--duplicate-strategy', 'replace', 'https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # With replace strategy, both files should be added
+      records = command.db.execute("SELECT COUNT(*) FROM file_records")
+      assert_equal 2, records.first[0]
+      
+      # Second file should be marked as duplicate
+      duplicate_record = command.db.execute("SELECT duplicate_of_gdrive_id FROM file_records WHERE gdrive_id = 'file2'")
+      assert_equal 'file1', duplicate_record.first[0]
+      
+      gdrive_client.verify
+    end
+
+    it 'generates file_hash for all files' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'test1.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'test2.docx',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 2048,
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # Verify file_hash is generated for all files
+      records = command.db.execute("SELECT gdrive_id, file_hash FROM file_records ORDER BY gdrive_id")
+      
+      assert_equal 2, records.size
+      
+      records.each do |record|
+        assert record[1] # file_hash should not be nil
+        assert_equal 32, record[1].length # MD5 hash length
+      end
+      
+      # Verify hashes are different for different files
+      hash1 = records.find { |r| r[0] == 'file1' }[1]
+      hash2 = records.find { |r| r[0] == 'file2' }[1]
+      refute_equal hash1, hash2
+      
+      gdrive_client.verify
+    end
+
+    it 'shows duplicate information when --show-duplicates is used' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      # Create command with show_duplicates option
+      show_duplicates_options = { database: File.join(Dir.tmpdir, "discover_show_duplicates_#{SecureRandom.hex(8)}.db") }
+      HumataImport::Database.initialize_schema(show_duplicates_options[:database])
+      show_duplicates_command = HumataImport::Commands::Discover.new(show_duplicates_options)
+      
+      args = ['--show-duplicates', 'https://drive.google.com/drive/folders/test_folder']
+      show_duplicates_command.run(args, gdrive_client: gdrive_client)
+
+      # With default skip strategy, only the first file should be added
+      records = show_duplicates_command.db.execute("SELECT COUNT(*) FROM file_records")
+      assert_equal 1, records.first[0]
+      
+      gdrive_client.verify
+    ensure
+      if defined?(show_duplicates_options) && show_duplicates_options[:database]
+        File.delete(show_duplicates_options[:database]) if File.exist?(show_duplicates_options[:database])
+      end
+    end
+
+    it 'distinguishes between different file types with same name and size' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      
+      args = ['https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # These should NOT be considered duplicates due to different MIME types
+      records = command.db.execute("SELECT gdrive_id, duplicate_of_gdrive_id FROM file_records ORDER BY gdrive_id")
+      
+      assert_equal 2, records.size
+      
+      # Neither file should be marked as duplicate
+      records.each do |record|
+        assert_nil record[1] # duplicate_of_gdrive_id should be nil
+      end
+      
+      gdrive_client.verify
+    end
   end
 end 

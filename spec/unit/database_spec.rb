@@ -57,7 +57,8 @@ describe HumataImport::Database do
         'id', 'gdrive_id', 'name', 'url', 'size', 'mime_type',
         'humata_folder_id', 'humata_id', 'upload_status', 'processing_status',
         'last_error', 'humata_verification_response', 'humata_import_response',
-        'humata_pages', 'discovered_at', 'uploaded_at', 'completed_at', 'last_checked_at'
+        'humata_pages', 'created_time', 'modified_time', 'duplicate_of_gdrive_id', 'file_hash',
+        'discovered_at', 'uploaded_at', 'completed_at', 'last_checked_at'
       ]
       
       assert_equal expected_columns.sort, column_names.sort
@@ -76,7 +77,10 @@ describe HumataImport::Database do
       expected_indexes = [
         'idx_files_status',
         'idx_files_gdrive_id', 
-        'idx_files_humata_id'
+        'idx_files_humata_id',
+        'idx_files_duplicate_detection',
+        'idx_files_file_hash',
+        'idx_files_duplicate_of'
       ]
       
       expected_indexes.each do |index_name|
