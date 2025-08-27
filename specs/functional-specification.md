@@ -702,6 +702,15 @@ humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-dela
 - **Advanced Retry Strategies**: Custom retry policies and adaptive backoff
 - **Retry Analytics**: Detailed retry success rate analysis and optimization
 
+### 13.4 Duplicate Detection and Management
+- **Smart Duplicate Detection**: Identify duplicate files across different Google Drive folders using file size + name combination
+- **Enhanced Metadata Collection**: Collect additional Google Drive API fields (createdTime, modifiedTime) for improved duplicate analysis
+- **Duplicate Handling Strategies**: User-configurable options for handling duplicates (skip, upload anyway, replace existing)
+- **Duplicate Reporting**: Comprehensive reporting on duplicates found with clear identification of original vs. duplicate files
+- **Cross-Session Duplicate Detection**: Detect duplicates across different import sessions using persistent duplicate tracking
+- **Performance Optimization**: Efficient duplicate detection using composite database indexes on (size, name, mime_type)
+- **User Experience**: Clear progress reporting and user guidance during duplicate detection process
+
 ### 13.2 Enhanced Verify Command Implementation
 - **Database Schema Updates**: Add `humata_pages` field for storing page count
 - **Status Mapping Logic**: Implement mapping between Humata API responses and internal status
