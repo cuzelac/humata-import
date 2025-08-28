@@ -50,7 +50,7 @@ module HumataImport
           opts.on('--no-recursive', 'Do not crawl subfolders') { options[:recursive] = false }
           opts.on('--max-files N', Integer, 'Limit number of files to discover') { |v| options[:max_files] = v }
           opts.on('--timeout SECONDS', Integer, 'Discovery timeout (default: 300s)') { |v| options[:timeout] = v }
-          opts.on('--duplicate-strategy STRATEGY', %w[skip upload replace], 'How to handle duplicates: skip, upload, or replace (default: skip)') { |v| options[:duplicate_strategy] = v }
+          opts.on('--duplicate-strategy STRATEGY', %w[skip upload replace track-duplicates], 'How to handle duplicates: skip, upload, replace, or track-duplicates (default: skip)') { |v| options[:duplicate_strategy] = v }
           opts.on('--show-duplicates', 'Show detailed duplicate information') { options[:show_duplicates] = true }
           opts.on('-v', '--verbose', 'Enable verbose output') { @options[:verbose] = true }
           opts.on('-q', '--quiet', 'Suppress non-essential output') { @options[:quiet] = true }
@@ -108,8 +108,45 @@ module HumataImport
             when 'skip'
               puts "⏭️  Skipping duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
               next
-            when 'replace', 'upload'
-              # For replace and upload strategies, create the file but mark it as duplicate
+            when 'track-duplicates'
+              # For track-duplicates strategy, create the file but mark it as duplicate
+              file_record = HumataImport::FileRecord.create(
+                db,
+                gdrive_id: file[:id],
+                name: file[:name],
+                url: file[:webContentLink],
+                size: file[:size],
+                mime_type: file[:mimeType],
+                created_time: file[:createdTime],
+                modified_time: file[:modifiedTime]
+              )
+              
+              # Update the duplicate_of_gdrive_id for the new file
+              db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
+              
+              added_files += 1
+            when 'replace'
+              # For replace strategy, delete the existing file and create a new one
+              puts "🔄 Replacing existing file: #{duplicate_info[:duplicate_name]}" if @options[:verbose] && !@options[:quiet]
+              
+              # Delete the original file record
+              HumataImport::FileRecord.delete(db, duplicate_info[:duplicate_of_gdrive_id])
+              
+              # Create the new file record
+              file_record = HumataImport::FileRecord.create(
+                db,
+                gdrive_id: file[:id],
+                name: file[:name],
+                url: file[:webContentLink],
+                size: file[:size],
+                mime_type: file[:mimeType],
+                created_time: file[:createdTime],
+                modified_time: file[:modifiedTime]
+              )
+              
+              added_files += 1
+            when 'upload'
+              # For upload strategy, create the file but mark it as duplicate
               file_record = HumataImport::FileRecord.create(
                 db,
                 gdrive_id: file[:id],

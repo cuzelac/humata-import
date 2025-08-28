@@ -80,6 +80,15 @@ module HumataImport
       !result.nil?
     end
 
+    # Deletes a file record by gdrive_id.
+    #
+    # @param db [SQLite3::Database] Database connection
+    # @param gdrive_id [String] Google Drive file ID
+    # @return [void]
+    def self.delete(db, gdrive_id)
+      db.execute("DELETE FROM #{TABLE} WHERE gdrive_id = ?", [gdrive_id])
+    end
+
     # Finds duplicate files based on file hash.
     #
     # @param db [SQLite3::Database] Database connection

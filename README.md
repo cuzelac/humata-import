@@ -96,15 +96,22 @@ rake install
    ```
 
    **Duplicate handling strategies:**
-   - `--duplicate-strategy skip` - Skip duplicate files (default)
-   - `--duplicate-strategy upload` - Upload duplicates anyway
-   - `--duplicate-strategy replace` - Replace existing files with duplicates
+   - `--duplicate-strategy skip` - Skip duplicate files entirely (default)
+   - `--duplicate-strategy upload` - Upload duplicates and mark them as duplicates of originals
+   - `--duplicate-strategy replace` - Delete the original file and replace it with the new duplicate
+   - `--duplicate-strategy track-duplicates` - Track all files including duplicates for audit purposes
    - `--show-duplicates` - Display detailed duplicate information
 
    **Additional discover options:**
    - `--recursive` / `--no-recursive` - Control subfolder crawling (default: recursive)
    - `--max-files N` - Limit number of files to discover
    - `--timeout SECONDS` - Discovery timeout (default: 300s)
+
+   **How duplicate strategies work:**
+   - **skip**: No duplicate files are stored in the database
+   - **upload**: Duplicates are stored with a reference to the original file
+   - **replace**: The original file is deleted and replaced with the new duplicate
+   - **track-duplicates**: All files are stored, with duplicates marked for tracking
 
 2. **Upload files**
    ```bash
