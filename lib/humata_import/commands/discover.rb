@@ -95,19 +95,7 @@ module HumataImport
             next
           end
           
-          # Create file record with enhanced metadata
-          file_record = HumataImport::FileRecord.create(
-            db,
-            gdrive_id: file[:id],
-            name: file[:name],
-            url: file[:webContentLink],
-            size: file[:size],
-            mime_type: file[:mimeType],
-            created_time: file[:createdTime],
-            modified_time: file[:modifiedTime]
-          )
-          
-          # Check if this is a duplicate of an existing file
+          # Check if this is a duplicate of an existing file BEFORE creating the record
           file_hash = HumataImport::FileRecord.generate_file_hash(file[:size], file[:name], file[:mimeType])
           duplicate_info = HumataImport::FileRecord.find_duplicate(db, file_hash, file[:id])
           
@@ -120,18 +108,39 @@ module HumataImport
             when 'skip'
               puts "⏭️  Skipping duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
               next
-            when 'replace'
-              puts "🔄 Replacing duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
+            when 'replace', 'upload'
+              # For replace and upload strategies, create the file but mark it as duplicate
+              file_record = HumataImport::FileRecord.create(
+                db,
+                gdrive_id: file[:id],
+                name: file[:name],
+                url: file[:webContentLink],
+                size: file[:size],
+                mime_type: file[:mimeType],
+                created_time: file[:createdTime],
+                modified_time: file[:modifiedTime]
+              )
+              
               # Update the duplicate_of_gdrive_id for the new file
               db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
-            when 'upload'
-              puts "📤 Will upload duplicate file: #{file[:name]}" if @options[:verbose] && !@options[:quiet]
-              # Mark as duplicate but still upload
-              db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
+              
+              added_files += 1
             end
+          else
+            # No duplicate found, create the file record normally
+            file_record = HumataImport::FileRecord.create(
+              db,
+              gdrive_id: file[:id],
+              name: file[:name],
+              url: file[:webContentLink],
+              size: file[:size],
+              mime_type: file[:mimeType],
+              created_time: file[:createdTime],
+              modified_time: file[:modifiedTime]
+            )
+            
+            added_files += 1
           end
-          
-          added_files += 1
           
           # Progress reporting
           if @options[:verbose] && !@options[:quiet]
@@ -147,7 +156,21 @@ module HumataImport
           puts "   Total files found: #{total_files}"
           puts "   New files added: #{added_files}"
           puts "   Existing files skipped: #{skipped_files}"
+          puts "   Duplicate files detected: #{duplicate_files}"
           puts "   Database now contains: #{HumataImport::FileRecord.all(db).size} total files"
+          
+          # Show duplicate details if requested
+          if options[:show_duplicates] && duplicate_files > 0
+            puts "\n🔄 Duplicate Files Details:"
+            duplicates = HumataImport::FileRecord.find_all_duplicates(db)
+            duplicates.each do |duplicate_group|
+              puts "   📁 Group (#{duplicate_group[:count]} files):"
+              duplicate_group[:gdrive_ids].each_with_index do |gdrive_id, index|
+                puts "      - #{duplicate_group[:names][index]} (#{duplicate_group[:sizes][index]} bytes, #{duplicate_group[:mime_types][index]})"
+              end
+              puts "      Hash: #{duplicate_group[:file_hash]}"
+            end
+          end
         end
       end
     end

@@ -197,4 +197,248 @@ describe HumataImport::FileRecord do
       assert_empty all_files
     end
   end
+
+  describe '.generate_file_hash' do
+    it 'generates hash from size, name, and mime_type' do
+      hash1 = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', 'application/pdf')
+      hash2 = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', 'application/pdf')
+      
+      assert_equal hash1, hash2
+      assert_equal 32, hash1.length # MD5 hash length
+    end
+
+    it 'generates different hashes for different files' do
+      hash1 = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', 'application/pdf')
+      hash2 = HumataImport::FileRecord.generate_file_hash(2048, 'test.pdf', 'application/pdf')
+      hash3 = HumataImport::FileRecord.generate_file_hash(1024, 'different.pdf', 'application/pdf')
+      
+      refute_equal hash1, hash2
+      refute_equal hash1, hash3
+      refute_equal hash2, hash3
+    end
+
+    it 'handles nil mime_type' do
+      hash1 = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', nil)
+      hash2 = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', 'unknown')
+      
+      assert_equal hash1, hash2
+    end
+
+    it 'returns nil for nil size or name' do
+      assert_nil HumataImport::FileRecord.generate_file_hash(nil, 'test.pdf', 'application/pdf')
+      assert_nil HumataImport::FileRecord.generate_file_hash(1024, nil, 'application/pdf')
+      assert_nil HumataImport::FileRecord.generate_file_hash(nil, nil, 'application/pdf')
+    end
+
+    it 'normalizes file names for consistent hashing' do
+      hash1 = HumataImport::FileRecord.generate_file_hash(1024, 'Test.PDF', 'application/pdf')
+      hash2 = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', 'application/pdf')
+      hash3 = HumataImport::FileRecord.generate_file_hash(1024, '  test.pdf  ', 'application/pdf')
+      
+      assert_equal hash1, hash2
+      assert_equal hash1, hash3
+    end
+  end
+
+  describe '.find_duplicate' do
+    before do
+      # Create a base file for duplicate detection
+      HumataImport::FileRecord.create(
+        @db,
+        gdrive_id: 'original_123',
+        name: 'document.pdf',
+        url: 'url1',
+        size: 1024,
+        mime_type: 'application/pdf'
+      )
+    end
+
+    it 'finds duplicate files based on file hash' do
+      duplicate_info = HumataImport::FileRecord.find_duplicate(@db, 'test_hash', 'new_file_456')
+      
+      # Since we're using a real hash, we need to generate it from the original file
+      file_hash = HumataImport::FileRecord.generate_file_hash(1024, 'document.pdf', 'application/pdf')
+      duplicate_info = HumataImport::FileRecord.find_duplicate(@db, file_hash, 'new_file_456')
+      
+      assert duplicate_info[:duplicate_found]
+      assert_equal 'original_123', duplicate_info[:duplicate_of_gdrive_id]
+      assert_equal 'document.pdf', duplicate_info[:duplicate_name]
+      assert_equal 1024, duplicate_info[:duplicate_size]
+      assert_equal 'application/pdf', duplicate_info[:duplicate_mime_type]
+    end
+
+    it 'excludes the specified gdrive_id from search' do
+      file_hash = HumataImport::FileRecord.generate_file_hash(1024, 'document.pdf', 'application/pdf')
+      duplicate_info = HumataImport::FileRecord.find_duplicate(@db, file_hash, 'original_123')
+      
+      refute duplicate_info[:duplicate_found]
+      assert_nil duplicate_info[:duplicate_of_gdrive_id]
+    end
+
+    it 'returns no duplicate when file hash is nil' do
+      duplicate_info = HumataImport::FileRecord.find_duplicate(@db, nil, 'new_file_456')
+      
+      refute duplicate_info[:duplicate_found]
+      assert_nil duplicate_info[:duplicate_of_gdrive_id]
+    end
+
+    it 'returns no duplicate when no matching files exist' do
+      file_hash = HumataImport::FileRecord.generate_file_hash(9999, 'nonexistent.pdf', 'application/pdf')
+      duplicate_info = HumataImport::FileRecord.find_duplicate(@db, file_hash, 'new_file_456')
+      
+      refute duplicate_info[:duplicate_found]
+      assert_nil duplicate_info[:duplicate_of_gdrive_id]
+    end
+
+    it 'returns earliest discovered file when multiple duplicates exist' do
+      # Create another file with same hash but different gdrive_id
+      HumataImport::FileRecord.create(
+        @db,
+        gdrive_id: 'duplicate_456',
+        name: 'document.pdf',
+        url: 'url2',
+        size: 1024,
+        mime_type: 'application/pdf'
+      )
+      
+      file_hash = HumataImport::FileRecord.generate_file_hash(1024, 'document.pdf', 'application/pdf')
+      duplicate_info = HumataImport::FileRecord.find_duplicate(@db, file_hash, 'new_file_789')
+      
+      assert duplicate_info[:duplicate_found]
+      # Should return the earliest discovered file (original_123)
+      assert_equal 'original_123', duplicate_info[:duplicate_of_gdrive_id]
+    end
+  end
+
+  describe '.find_all_duplicates' do
+    before do
+      # Create files with some duplicates
+      HumataImport::FileRecord.create(@db, gdrive_id: 'file_1', name: 'doc1.pdf', url: 'url1', size: 1024, mime_type: 'application/pdf')
+      HumataImport::FileRecord.create(@db, gdrive_id: 'file_2', name: 'doc1.pdf', url: 'url2', size: 1024, mime_type: 'application/pdf')
+      HumataImport::FileRecord.create(@db, gdrive_id: 'file_3', name: 'doc2.pdf', url: 'url3', size: 2048, mime_type: 'application/pdf')
+      HumataImport::FileRecord.create(@db, gdrive_id: 'file_4', name: 'doc2.pdf', url: 'url4', size: 2048, mime_type: 'application/pdf')
+      HumataImport::FileRecord.create(@db, gdrive_id: 'file_5', name: 'doc2.pdf', url: 'url5', size: 2048, mime_type: 'application/pdf')
+      HumataImport::FileRecord.create(@db, gdrive_id: 'file_6', name: 'unique.pdf', url: 'url6', size: 512, mime_type: 'application/pdf')
+    end
+
+    it 'finds all duplicate groups' do
+      duplicates = HumataImport::FileRecord.find_all_duplicates(@db)
+      
+      assert_equal 2, duplicates.size
+      
+      # Group 1: 2 files with same hash (doc1.pdf)
+      group1 = duplicates.find { |d| d[:count] == 2 }
+      assert_equal 2, group1[:count]
+      assert_equal 2, group1[:gdrive_ids].size
+      assert_equal 2, group1[:names].size
+      assert_equal 2, group1[:sizes].size
+      assert_equal 2, group1[:mime_types].size
+      
+      # Group 2: 3 files with same hash (doc2.pdf)
+      group2 = duplicates.find { |d| d[:count] == 3 }
+      assert_equal 3, group2[:count]
+      assert_equal 3, group2[:gdrive_ids].size
+      assert_equal 3, group2[:names].size
+      assert_equal 3, group2[:sizes].size
+      assert_equal 3, group2[:mime_types].size
+    end
+
+    it 'orders duplicates by count descending' do
+      duplicates = HumataImport::FileRecord.find_all_duplicates(@db)
+      
+      assert_equal 3, duplicates.first[:count]  # doc2.pdf group
+      assert_equal 2, duplicates.last[:count]   # doc1.pdf group
+    end
+
+    it 'includes file hash in results' do
+      duplicates = HumataImport::FileRecord.find_all_duplicates(@db)
+      
+      duplicates.each do |duplicate|
+        assert duplicate[:file_hash]
+        assert_equal 32, duplicate[:file_hash].length # MD5 hash length
+      end
+    end
+
+    it 'returns empty array when no duplicates exist' do
+      # Clear database and create only unique files
+      @db.execute('DELETE FROM file_records')
+      
+      HumataImport::FileRecord.create(@db, gdrive_id: 'unique_1', name: 'file1.pdf', url: 'url1', size: 1024, mime_type: 'application/pdf')
+      HumataImport::FileRecord.create(@db, gdrive_id: 'unique_2', name: 'file2.pdf', url: 'url2', size: 2048, mime_type: 'application/pdf')
+      
+      duplicates = HumataImport::FileRecord.find_all_duplicates(@db)
+      assert_empty duplicates
+    end
+  end
+
+  describe 'duplicate detection in create method' do
+    it 'sets duplicate_of_gdrive_id when duplicate is found' do
+      # Create original file
+      HumataImport::FileRecord.create(
+        @db,
+        gdrive_id: 'original_123',
+        name: 'document.pdf',
+        url: 'url1',
+        size: 1024,
+        mime_type: 'application/pdf'
+      )
+      
+      # Create duplicate file
+      HumataImport::FileRecord.create(
+        @db,
+        gdrive_id: 'duplicate_456',
+        name: 'document.pdf',
+        url: 'url2',
+        size: 1024,
+        mime_type: 'application/pdf'
+      )
+      
+      # Check that duplicate file has duplicate_of_gdrive_id set
+      records = @db.execute("SELECT duplicate_of_gdrive_id FROM file_records WHERE gdrive_id = ?", ['duplicate_456'])
+      assert_equal 'original_123', records.first[0]
+    end
+
+    it 'sets file_hash for all created records' do
+      HumataImport::FileRecord.create(
+        @db,
+        gdrive_id: 'test_123',
+        name: 'test.pdf',
+        url: 'url1',
+        size: 1024,
+        mime_type: 'application/pdf'
+      )
+      
+      records = @db.execute("SELECT file_hash FROM file_records WHERE gdrive_id = ?", ['test_123'])
+      file_hash = records.first[0]
+      
+      assert file_hash
+      assert_equal 32, file_hash.length # MD5 hash length
+      
+      # Verify hash matches expected value
+      expected_hash = HumataImport::FileRecord.generate_file_hash(1024, 'test.pdf', 'application/pdf')
+      assert_equal expected_hash, file_hash
+    end
+
+    it 'handles created_time and modified_time fields' do
+      created_time = '2024-01-01T10:00:00Z'
+      modified_time = '2024-01-01T11:00:00Z'
+      
+      HumataImport::FileRecord.create(
+        @db,
+        gdrive_id: 'time_test_123',
+        name: 'time_test.pdf',
+        url: 'url1',
+        size: 1024,
+        mime_type: 'application/pdf',
+        created_time: created_time,
+        modified_time: modified_time
+      )
+      
+      records = @db.execute("SELECT created_time, modified_time FROM file_records WHERE gdrive_id = ?", ['time_test_123'])
+      record = records.first
+      
+      assert_equal created_time, record[0]
+      assert_equal modified_time, record[1]
+    end
+  end
 end 

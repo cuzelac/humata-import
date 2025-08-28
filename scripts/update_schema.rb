@@ -55,8 +55,14 @@ class SchemaUpdater
       
       if updates_applied > 0
         puts "✅ Schema update completed! Applied #{updates_applied} updates."
+        
+        # Check if we need to populate file hashes
+        populate_existing_file_hashes
       else
         puts "✅ Schema is already up to date!"
+        
+        # Still check for file hash population needs
+        populate_existing_file_hashes
       end
       
     rescue SQLite3::Exception => e
@@ -147,6 +153,23 @@ class SchemaUpdater
 
   def index_exists?(index_name)
     @db.execute("PRAGMA index_list(file_records)").any? { |row| row[1] == index_name }
+  end
+
+  def populate_existing_file_hashes
+    puts "\n🔍 Checking file hash population needs..."
+    
+    records_without_hash = @db.get_first_value("SELECT COUNT(*) FROM file_records WHERE file_hash IS NULL")
+    records_without_hash = records_without_hash || 0
+    
+    if records_without_hash > 0
+      puts "📊 Found #{records_without_hash} records without file_hash"
+      puts "💡 To populate file hashes for duplicate detection, run:"
+      puts "   ruby scripts/populate_file_hashes.rb #{@db_path}"
+      puts "\n   This will enable duplicate detection for all existing files."
+    else
+      puts "✅ All records already have file_hash values"
+      puts "   Duplicate detection is fully functional!"
+    end
   end
 
   def verify_schema
