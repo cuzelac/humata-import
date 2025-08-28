@@ -170,6 +170,30 @@ class SchemaUpdater
       puts "✅ All records already have file_hash values"
       puts "   Duplicate detection is fully functional!"
     end
+    
+    # Check for duplicate relationships that need to be established
+    check_duplicate_relationships
+  end
+  
+  def check_duplicate_relationships
+    puts "\n🔍 Checking duplicate relationship population needs..."
+    
+    # Count records that have file_hash but no duplicate relationship
+    records_with_hash_no_duplicate = @db.get_first_value(<<-SQL)
+      SELECT COUNT(*) FROM file_records 
+      WHERE file_hash IS NOT NULL 
+      AND duplicate_of_gdrive_id IS NULL
+    SQL
+    records_with_hash_no_duplicate = records_with_hash_no_duplicate || 0
+    
+    if records_with_hash_no_duplicate > 0
+      puts "📊 Found #{records_with_hash_no_duplicate} records with file_hash but no duplicate relationships"
+      puts "💡 To establish duplicate relationships for existing files, run:"
+      puts "   ruby scripts/populate_duplicate_relationships.rb #{@db_path}"
+      puts "\n   This will identify and link existing duplicate files."
+    else
+      puts "✅ All records already have proper duplicate relationships"
+    end
   end
 
   def verify_schema

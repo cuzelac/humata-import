@@ -224,15 +224,26 @@ All commands support:
 The tool automatically manages database schema updates and provides utilities for data maintenance:
 
 ```bash
-# Update database schema (adds duplicate detection fields)
+# Step 1: Update database schema (adds duplicate detection fields)
 ruby scripts/update_schema.rb [database_path]
 
-# Populate file hashes for existing files
+# Step 2: Populate file hashes for existing files
 ruby scripts/populate_file_hashes.rb [database_path]
 
-# Test duplicate detection system
+# Step 3: Establish duplicate relationships for existing files
+ruby scripts/populate_duplicate_relationships.rb [database_path]
+
+# Step 4: Test duplicate detection system
 ruby scripts/test_duplicate_detection.rb [database_path]
 ```
+
+**Complete Migration Process:**
+1. **Schema Update**: Adds new columns and indexes for duplicate detection
+2. **Hash Population**: Computes file hashes for all existing records
+3. **Relationship Population**: Identifies and links existing duplicate files
+4. **Verification**: Tests the complete duplicate detection system
+
+**Note**: Run these scripts in order for old databases to get full duplicate detection functionality.
 
 ## Documentation
 
