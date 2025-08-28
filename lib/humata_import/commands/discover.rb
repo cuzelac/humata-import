@@ -99,6 +99,10 @@ module HumataImport
           file_hash = HumataImport::FileRecord.generate_file_hash(file[:size], file[:name], file[:mimeType])
           duplicate_info = HumataImport::FileRecord.find_duplicate(db, file_hash, file[:id])
           
+          # Ensure timestamps are properly formatted strings
+          created_time = file[:createdTime]&.to_s
+          modified_time = file[:modifiedTime]&.to_s
+          
           if duplicate_info[:duplicate_found]
             duplicate_files += 1
             puts "🔄 Duplicate detected: #{file[:name]} (same as: #{duplicate_info[:duplicate_name]})" if @options[:verbose] && !@options[:quiet]
@@ -117,8 +121,8 @@ module HumataImport
                 url: file[:webContentLink],
                 size: file[:size],
                 mime_type: file[:mimeType],
-                created_time: file[:createdTime],
-                modified_time: file[:modifiedTime]
+                created_time: created_time,
+                modified_time: modified_time
               )
               
               # Update the duplicate_of_gdrive_id for the new file
@@ -126,11 +130,8 @@ module HumataImport
               
               added_files += 1
             when 'replace'
-              # For replace strategy, delete the existing file and create a new one
+              # For replace strategy, create the file but mark it as duplicate
               puts "🔄 Replacing existing file: #{duplicate_info[:duplicate_name]}" if @options[:verbose] && !@options[:quiet]
-              
-              # Delete the original file record
-              HumataImport::FileRecord.delete(db, duplicate_info[:duplicate_of_gdrive_id])
               
               # Create the new file record
               file_record = HumataImport::FileRecord.create(
@@ -140,9 +141,12 @@ module HumataImport
                 url: file[:webContentLink],
                 size: file[:size],
                 mime_type: file[:mimeType],
-                created_time: file[:createdTime],
-                modified_time: file[:modifiedTime]
+                created_time: created_time,
+                modified_time: modified_time
               )
+              
+              # Update the duplicate_of_gdrive_id for the new file
+              db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
               
               added_files += 1
             when 'upload'
@@ -154,8 +158,8 @@ module HumataImport
                 url: file[:webContentLink],
                 size: file[:size],
                 mime_type: file[:mimeType],
-                created_time: file[:createdTime],
-                modified_time: file[:modifiedTime]
+                created_time: created_time,
+                modified_time: modified_time
               )
               
               # Update the duplicate_of_gdrive_id for the new file
@@ -172,8 +176,8 @@ module HumataImport
               url: file[:webContentLink],
               size: file[:size],
               mime_type: file[:mimeType],
-              created_time: file[:createdTime],
-              modified_time: file[:modifiedTime]
+              created_time: created_time,
+              modified_time: modified_time
             )
             
             added_files += 1

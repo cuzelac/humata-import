@@ -40,8 +40,12 @@ module HumataImport
       # Check for duplicates
       duplicate_info = find_duplicate(db, file_hash, gdrive_id)
       
+      # Ensure timestamps are properly formatted strings
+      created_time = attrs[:created_time]&.to_s
+      modified_time = attrs[:modified_time]&.to_s
+      
       db.execute("INSERT OR IGNORE INTO #{TABLE} (gdrive_id, name, url, size, mime_type, humata_folder_id, upload_status, created_time, modified_time, duplicate_of_gdrive_id, file_hash, discovered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-        [gdrive_id, name, url, attrs[:size], attrs[:mime_type], attrs[:humata_folder_id], attrs[:upload_status] || 'pending', attrs[:created_time], attrs[:modified_time], duplicate_info[:duplicate_of_gdrive_id], file_hash])
+        [gdrive_id, name, url, attrs[:size], attrs[:mime_type], attrs[:humata_folder_id], attrs[:upload_status] || 'pending', created_time, modified_time, duplicate_info[:duplicate_of_gdrive_id], file_hash])
     end
 
     # Finds all files with pending upload status.

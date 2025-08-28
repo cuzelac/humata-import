@@ -161,8 +161,8 @@ module HumataImport
                     mimeType: file.mime_type,
                     webContentLink: file.web_content_link,
                     size: file.size,
-                    createdTime: file.created_time,
-                    modifiedTime: file.modified_time
+                    createdTime: file.created_time&.iso8601,
+                    modifiedTime: file.modified_time&.iso8601
                   }
                   
                   # Check max files limit
