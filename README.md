@@ -1,6 +1,6 @@
 # Humata.ai Google Drive Import Tool
 
-A Ruby command-line tool for importing files from Google Drive folders into Humata.ai. Features recursive folder crawling, batch processing, and comprehensive status tracking.
+A Ruby command-line tool for importing files from Google Drive folders into Humata.ai. Features recursive folder crawling, batch processing, comprehensive status tracking, and intelligent duplicate detection.
 
 ## Features
 
@@ -24,6 +24,13 @@ A Ruby command-line tool for importing files from Google Drive folders into Huma
   - Failed upload retry on subsequent runs
   - Rate limiting
   - Comprehensive error reporting
+
+- 🔄 **Smart Duplicate Detection**
+  - Intelligent duplicate identification using file size + name + MIME type
+  - Configurable duplicate handling strategies (skip, upload, replace)
+  - Cross-session duplicate tracking
+  - Performance-optimized detection with composite database indexes
+  - Comprehensive duplicate reporting and analysis
 
 ## Prerequisites
 
@@ -64,12 +71,13 @@ rake install
    export GOOGLE_APPLICATION_CREDENTIALS='path/to/service-account-key.json'
    ```
 
-2. **Run complete workflow**
+2. **Run complete workflow with duplicate detection**
    ```bash
    humata-import run \
      "https://drive.google.com/drive/folders/your-folder-id" \
      --folder-id "your-humata-folder-id" \
      --database ./import_session.db \
+     --duplicate-strategy skip \
      --verbose
    ```
 
@@ -77,13 +85,21 @@ rake install
 
 ### Individual Commands
 
-1. **Discover files**
+1. **Discover files with duplicate detection**
    ```bash
    humata-import discover \
      "https://drive.google.com/drive/folders/your-folder-id" \
      --file-types pdf,doc,docx \
-     --database ./import_session.db
+     --database ./import_session.db \
+     --duplicate-strategy skip \
+     --show-duplicates
    ```
+
+   **Duplicate handling strategies:**
+   - `--duplicate-strategy skip` - Skip duplicate files (default)
+   - `--duplicate-strategy upload` - Upload duplicates anyway
+   - `--duplicate-strategy replace` - Replace existing files with duplicates
+   - `--show-duplicates` - Display detailed duplicate information
 
 2. **Upload files**
    ```bash
@@ -115,20 +131,54 @@ rake install
      --database ./import_session.db
    ```
 
-4. **Check status**
+4. **Check status and duplicates**
    ```bash
+   # Overall status
    humata-import status \
      --format text \
      --database ./import_session.db
-   ```
 
-   **View failed uploads:**
-   ```bash
-   # Show only failed uploads ready for retry
+   # Failed uploads only
    humata-import status \
      --failed-only \
      --database ./import_session.db
+
+   # Export to CSV for analysis
+   humata-import status \
+     --format csv \
+     --output status_report.csv \
+     --database ./import_session.db
    ```
+
+### Duplicate Detection Features
+
+The tool provides comprehensive duplicate detection capabilities:
+
+- **Smart Detection**: Uses file size + name + MIME type combination for reliable identification
+- **Performance Optimized**: Composite database indexes ensure fast detection even with 10,000+ files
+- **Cross-Session Tracking**: Detects duplicates across different import sessions
+- **Flexible Handling**: Choose how to handle duplicates (skip, upload, or replace)
+- **Detailed Reporting**: Get comprehensive information about duplicate groups
+
+**Example duplicate detection output:**
+```bash
+🔄 Duplicate detected: document.pdf (same as: document.pdf)
+⏭️  Skipping duplicate file: document.pdf
+
+🎯 Discovery Summary:
+   Total files found: 150
+   New files added: 120
+   Existing files skipped: 20
+   Duplicate files detected: 10
+   Database now contains: 150 total files
+
+🔄 Duplicate Files Details:
+   📁 Group (3 files):
+      - document.pdf (1024000 bytes, application/pdf)
+      - document.pdf (1024000 bytes, application/pdf)
+      - document.pdf (1024000 bytes, application/pdf)
+      Hash: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+```
 
 ### Common Options
 
@@ -136,6 +186,21 @@ All commands support:
 - `--database PATH` - SQLite database file
 - `--verbose` - Enable detailed logging
 - `-h, --help` - Show command help
+
+## Database Management
+
+The tool automatically manages database schema updates and provides utilities for data maintenance:
+
+```bash
+# Update database schema (adds duplicate detection fields)
+ruby scripts/update_schema.rb [database_path]
+
+# Populate file hashes for existing files
+ruby scripts/populate_file_hashes.rb [database_path]
+
+# Test duplicate detection system
+ruby scripts/test_duplicate_detection.rb [database_path]
+```
 
 ## Documentation
 
