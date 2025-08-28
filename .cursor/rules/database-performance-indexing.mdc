@@ -1,0 +1,200 @@
+# Database Performance and Indexing Rule
+
+## Description
+This rule establishes best practices for database performance optimization, particularly for duplicate detection and large dataset operations, based on lessons learned from implementing the Humata Import duplicate detection system.
+
+## Rule
+When designing database operations for performance-critical applications:
+
+1. **Index Design for Duplicate Detection**
+   - MUST create composite indexes for multi-column duplicate detection queries
+   - MUST index the `file_hash` column for fast duplicate lookups
+   - MUST use covering indexes when possible to avoid table lookups
+   - MUST consider query patterns when designing index order
+
+2. **Performance Targets**
+   - Duplicate detection queries MUST complete in < 100ms for 10,000+ records
+   - Individual file lookups MUST complete in < 10ms
+   - Bulk operations MUST scale linearly with dataset size
+   - Memory usage MUST remain constant regardless of dataset size
+
+3. **Query Optimization**
+   - MUST use parameterized queries to prevent SQL injection
+   - MUST avoid N+1 queries in loops
+   - MUST use `LIMIT` clauses for large result sets
+   - MUST prefer `EXISTS` over `COUNT(*)` for existence checks
+
+4. **Schema Design for Performance**
+   - MUST use appropriate data types (TEXT for hashes, INTEGER for counts)
+   - MUST add performance indexes alongside schema changes
+   - MUST consider data distribution when choosing index types
+   - MUST validate index effectiveness with real data
+
+## Implementation Guidelines
+
+### Composite Index Design
+```sql
+-- For duplicate detection queries
+CREATE INDEX idx_files_duplicate_detection ON file_records(size, name, mime_type);
+
+-- For hash-based lookups
+CREATE INDEX idx_files_file_hash ON file_records(file_hash);
+
+-- For relationship tracking
+CREATE INDEX idx_files_duplicate_of ON file_records(duplicate_of_gdrive_id);
+```
+
+### Performance-Optimized Queries
+```ruby
+# Good: Single query with proper indexing
+def find_duplicates_by_hash(db, file_hash)
+  db.execute(<<-SQL, [file_hash])
+    SELECT gdrive_id, name, size, mime_type, discovered_at
+    FROM file_records 
+    WHERE file_hash = ?
+    ORDER BY discovered_at ASC
+  SQL
+end
+
+# Bad: Multiple queries in loop (N+1 problem)
+def find_duplicates_inefficient(db, file_hashes)
+  file_hashes.map { |hash| db.execute("SELECT * FROM file_records WHERE file_hash = ?", [hash]) }
+end
+```
+
+### Bulk Operations
+```ruby
+# Good: Batch updates for performance
+def populate_file_hashes_batch(db, records)
+  db.transaction do
+    records.each_slice(1000) do |batch|
+      batch.each do |record|
+        db.execute("UPDATE file_records SET file_hash = ? WHERE gdrive_id = ?", 
+                  [record[:hash], record[:gdrive_id]])
+      end
+    end
+  end
+end
+
+# Bad: Individual updates
+def populate_file_hashes_slow(db, records)
+  records.each do |record|
+    db.execute("UPDATE file_records SET file_hash = ? WHERE gdrive_id = ?", 
+              [record[:hash], record[:gdrive_id]])
+  end
+end
+```
+
+## Examples
+
+### ✅ Good: Performance-Optimized Duplicate Detection
+```ruby
+class FileRecord
+  def self.find_all_duplicates(db)
+    # Single query with proper indexing
+    db.execute(<<-SQL)
+      SELECT file_hash, COUNT(*) as count, 
+             MIN(name) as sample_name,
+             MIN(discovered_at) as earliest_discovery
+      FROM file_records 
+      WHERE file_hash IS NOT NULL 
+      GROUP BY file_hash 
+      HAVING COUNT(*) > 1
+      ORDER BY count DESC, earliest_discovery ASC
+    SQL
+  end
+  
+  def self.find_duplicate(db, file_hash, gdrive_id)
+    # Fast lookup with covering index
+    db.get_first_row(<<-SQL, [file_hash, gdrive_id])
+      SELECT gdrive_id, name, size, mime_type, discovered_at
+      FROM file_records 
+      WHERE file_hash = ? AND gdrive_id != ?
+      ORDER BY discovered_at ASC
+      LIMIT 1
+    SQL
+  end
+end
+```
+
+### ❌ Bad: Performance Issues
+```ruby
+class FileRecord
+  def self.find_all_duplicates_slow(db)
+    # Multiple queries causing N+1 problem
+    all_hashes = db.execute("SELECT DISTINCT file_hash FROM file_records")
+    all_hashes.map do |hash_row|
+      hash = hash_row[0]
+      count = db.get_first_value("SELECT COUNT(*) FROM file_records WHERE file_hash = ?", [hash])
+      { file_hash: hash, count: count } if count > 1
+    end.compact
+  end
+end
+```
+
+## Performance Testing Requirements
+
+### Benchmark Tests
+```ruby
+it 'performs duplicate detection within performance targets' do
+  # Create test dataset
+  create_test_files(@db, 10000)
+  
+  start_time = Time.now
+  duplicates = HumataImport::FileRecord.find_all_duplicates(@db)
+  end_time = Time.now
+  
+  processing_time = end_time - start_time
+  _(processing_time).must_be :<, 0.1  # Must complete in < 100ms
+end
+
+it 'scales linearly with dataset size' do
+  [1000, 5000, 10000].each do |size|
+    create_test_files(@db, size)
+    
+    start_time = Time.now
+    HumataImport::FileRecord.find_all_duplicates(@db)
+    end_time = Time.now
+    
+    processing_time = end_time - start_time
+    # Should scale roughly linearly
+    _(processing_time).must_be :<, (size / 1000.0) * 0.05
+  end
+end
+```
+
+## Monitoring and Optimization
+
+### Performance Metrics
+- **Query execution time** for duplicate detection operations
+- **Index usage statistics** to verify index effectiveness
+- **Memory usage** during bulk operations
+- **Scalability** with increasing dataset sizes
+
+### Optimization Strategies
+1. **Index Analysis**: Use `EXPLAIN QUERY PLAN` to verify index usage
+2. **Query Profiling**: Monitor slow queries and optimize them
+3. **Index Maintenance**: Regularly analyze and rebuild indexes
+4. **Data Distribution**: Monitor data skew and adjust indexes accordingly
+
+## Benefits
+- **Fast duplicate detection** even with large datasets
+- **Predictable performance** regardless of data size
+- **Efficient resource usage** with proper indexing
+- **Scalable architecture** for growing datasets
+
+## Enforcement
+- Code review must verify performance targets are met
+- All database queries must use appropriate indexes
+- Performance tests must be included for critical operations
+- Index design must be documented and justified
+
+## Notes
+- This rule complements `database-schema-migration.mdc` for comprehensive database management
+- Based on successful implementation of duplicate detection system with 15,702 files
+- Performance targets derived from real-world testing and validation
+- Essential for maintaining fast response times in production environments
+description:
+globs:
+alwaysApply: true
+---
