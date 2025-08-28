@@ -1,3 +1,8 @@
+---
+description: Ruby Testing Standards Rule
+globs: *_spec.rb
+alwaysApply: false
+---
 
 # Ruby Testing Standards Rule
 

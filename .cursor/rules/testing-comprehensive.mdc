@@ -1,3 +1,9 @@
+---
+description: Comprehensive Testing Rule
+globs: *_spec.rb
+alwaysApply: false
+---
+
 # Comprehensive Testing Rule
 
 ## Description
@@ -91,19 +97,14 @@ def client_mock.verify; end
 #### Complex Scenario Mock
 ```ruby
 client_mock = Class.new do
-  def initialize
-    @call_count = 0
-  end
+  def initialize; @call_count = 0; end
   
   def upload_file(url, folder_id)
     @call_count += 1
     case @call_count
-    when 1
-      { 'id' => 'success-1' }
-    when 2
-      raise ExternalService::TransientError, 'Rate limit exceeded'
-    else
-      { 'id' => 'success-3' }
+    when 1; { 'id' => 'success-1' }
+    when 2; raise ExternalService::TransientError, 'Rate limit exceeded'
+    else; { 'id' => 'success-3' }
     end
   end
   
@@ -111,25 +112,7 @@ client_mock = Class.new do
 end.new
 ```
 
-### Parallel Processing Testing
-```ruby
-# Mock-aware threading logic
-def process_uploads_parallel(client, files, options)
-  if is_mock_client?(client)
-    logger.info "Using sequential processing for mock client (testing mode)"
-    process_uploads_sequential(client, files, options)
-  else
-    logger.info "Using parallel processing for real client"
-    process_uploads_with_threads(client, files, options)
-  end
-end
 
-def is_mock_client?(client)
-  (client.class.name&.include?('Mock') ||
-   client.respond_to?(:verify) ||
-   (client.respond_to?(:upload_file) && !client.respond_to?(:instance_variable_get)))
-end
-```
 
 ## Critical Examples
 
@@ -188,22 +171,11 @@ end
 
 ## Testing Requirements
 
-### Performance Targets
-- **Unit tests**: Must complete in < 0.1 seconds
-- **Integration tests**: Must complete in < 1.0 seconds  
-- **Full test suites**: Must complete in < 10 seconds
-
-### Isolation Requirements
-- Each test must start with clean state
-- No test data must persist between tests
-- All external resources must be properly mocked
-- All time delays must be stubbed or faked
-
-### Parallel Processing Requirements
-- Threading logic must detect and handle mock clients
-- Tests must use controlled thread counts
-- Resource isolation must be verified
-- Thread-safe mock detection must be implemented
+### Performance & Isolation
+- **Unit tests**: < 0.1 seconds, **Integration tests**: < 1.0 seconds, **Full suites**: < 10 seconds
+- Each test must start with clean state, no persistent test data
+- All external resources must be mocked, all time delays must be stubbed
+- Threading logic must detect mock clients, use controlled thread counts, verify resource isolation
 
 ## Enforcement
 - Code review must reject tests without proper mocking
@@ -213,12 +185,9 @@ end
 - Parallel processing code must detect mock clients
 
 ## Benefits
-- **Fast Execution**: Sub-second test completion
-- **Reliable Results**: No flaky tests due to external dependencies
-- **Easy Debugging**: Clear test isolation and predictable behavior
-- **Better Performance**: Reduced CI/CD pipeline times
-- **Maintainable Code**: Clear separation of concerns
-- **Thread Safety**: Proper handling of concurrent operations
+- **Fast Execution**: Sub-second test completion, **Reliable Results**: No flaky tests due to external dependencies
+- **Easy Debugging**: Clear test isolation and predictable behavior, **Better Performance**: Reduced CI/CD pipeline times
+- **Maintainable Code**: Clear separation of concerns, **Thread Safety**: Proper handling of concurrent operations
 
 ## Notes
 - This rule consolidates multiple testing-related rules for better maintainability
@@ -226,7 +195,3 @@ end
 - Critical for preventing 35+ second test timeouts
 - Essential for maintaining fast, reliable test suites
 - Covers both sequential and parallel testing scenarios
-description:
-globs:
-alwaysApply: true
----

@@ -1,3 +1,9 @@
+---
+description: Database Management Rule
+globs: *.rb
+alwaysApply: false
+---
+
 # Database Management Rule
 
 ## Description
@@ -70,17 +76,13 @@ end
 ```ruby
 def add_missing_column(column_name, column_type)
   return 0 if column_exists?(column_name)
-  
   @db.execute("ALTER TABLE file_records ADD COLUMN #{column_name} #{column_type}")
-  puts "✅ Added column '#{column_name}'"
   return 1
 end
 
 def add_missing_index(index_name, columns)
   return 0 if index_exists?(index_name)
-  
   @db.execute("CREATE INDEX #{index_name} ON file_records (#{columns})")
-  puts "✅ Added index '#{index_name}'"
   return 1
 end
 ```
@@ -103,12 +105,7 @@ CREATE INDEX idx_files_duplicate_of ON file_records(duplicate_of_gdrive_id);
 ```ruby
 # Good: Single query with proper indexing
 def find_duplicates_by_hash(db, file_hash)
-  db.execute(<<-SQL, [file_hash])
-    SELECT gdrive_id, name, size, mime_type, discovered_at
-    FROM file_records 
-    WHERE file_hash = ?
-    ORDER BY discovered_at ASC
-  SQL
+  db.execute("SELECT gdrive_id, name, size, mime_type, discovered_at FROM file_records WHERE file_hash = ? ORDER BY discovered_at ASC", [file_hash])
 end
 
 # Bad: Multiple queries in loop (N+1 problem)
@@ -137,47 +134,25 @@ ruby scripts/update_schema.rb [database_path]
 # Creates backup, adds missing columns/indexes, provides feedback
 ```
 
-### 2. Data Population (if needed)
+### 2. Data Population & Validation
 ```bash
-ruby scripts/populate_data.rb [database_path]
-# Populates data for new schema efficiently
-```
-
-### 3. Validation
-```bash
-ruby scripts/validate_migration.rb [database_path]
-# Verifies migration success and data integrity
+ruby scripts/populate_data.rb [database_path]    # Populates data for new schema
+ruby scripts/validate_migration.rb [database_path] # Verifies migration success
 ```
 
 ## Examples
 
 ### ✅ Good: Complete Migration Implementation
 ```ruby
-# 1. Update lib/humata_import/database.rb
 def self.initialize_schema(db_path)
   db = connect(db_path)
   db.execute_batch <<-SQL
     CREATE TABLE IF NOT EXISTS file_records (
-      id INTEGER PRIMARY KEY,
-      gdrive_id TEXT UNIQUE,
-      name TEXT,
-      size INTEGER,
-      mime_type TEXT,
-      file_hash TEXT,
-      duplicate_of_gdrive_id TEXT
+      id INTEGER PRIMARY KEY, gdrive_id TEXT UNIQUE, name TEXT,
+      size INTEGER, mime_type TEXT, file_hash TEXT, duplicate_of_gdrive_id TEXT
     );
   SQL
   db.close
-end
-
-# 2. Update scripts/update_schema.rb
-def add_missing_column(column_name, column_type)
-  if column_exists?(column_name)
-    puts "✓ Column '#{column_name}' already exists"
-    return 0
-  end
-  @db.execute("ALTER TABLE file_records ADD COLUMN #{column_name} #{column_type}")
-  return 1
 end
 ```
 
@@ -186,7 +161,6 @@ end
 # Direct schema change without updating both files
 class Verify < Base
   def run(args)
-    # This would fail on existing databases without the new column
     @db.execute("UPDATE file_records SET file_hash = ? WHERE id = ?", [hash, id])
   end
 end
@@ -216,7 +190,8 @@ end
 - Provides comprehensive database management in a single rule
 - Covers both simple script-based and framework-based approaches
 - Essential for maintaining data consistency and performance
-description:
-globs:
-alwaysApply: true
----
+
+- Based on successful implementation of duplicate detection system with 15,702 files
+- Provides comprehensive database management in a single rule
+- Covers both simple script-based and framework-based approaches
+- Essential for maintaining data consistency and performance

@@ -1,3 +1,9 @@
+---
+description: Ruby Concurrency Basics Rule
+globs: *.rb
+alwaysApply: false
+---
+
 # Ruby Concurrency Basics Rule
 
 ## Description
@@ -181,7 +187,3 @@ end
 - Complements `ruby-concurrency-advanced.mdc` for advanced patterns
 - Essential for maintaining system stability in concurrent environments
 - Based on successful implementation of parallel processing in duplicate detection system
-description:
-globs:
-alwaysApply: true
----
