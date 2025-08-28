@@ -1,0 +1,232 @@
+# Comprehensive Testing Rule
+
+## Description
+This rule establishes comprehensive testing standards covering test isolation, performance optimization, execution patterns, parallel processing, and mock client patterns, ensuring fast, reliable, and maintainable test suites.
+
+## Rule
+When writing tests for Ruby applications:
+
+1. **Test Isolation Requirements**
+   - Each test MUST get completely unique database paths/connections
+   - Database paths MUST use cryptographically random identifiers
+   - Tests MUST NOT share resources between test runs
+   - Resource cleanup MUST happen in `teardown` method
+
+2. **Performance Requirements**
+   - Tests MUST complete in < 1 second unless testing timing behavior
+   - MUST mock all external dependencies (HTTP clients, databases, services)
+   - MUST stub `sleep` calls in retry logic and rate limiting
+   - MUST use dependency injection for external service mocking
+
+3. **Mock Client Requirements**
+   - MUST provide mock clients for commands making external calls
+   - MUST use `Minitest::Mock` for external service mocking
+   - MUST stub sleep calls to prevent test hangs
+   - MUST verify mock expectations with `verify`
+
+4. **Parallel Processing Testing**
+   - Threading logic MUST detect mock clients and fall back to sequential processing
+   - Tests MUST use `--threads 1` to force sequential execution
+   - Resource isolation MUST be verified for all concurrent operations
+   - Thread-safe mock detection MUST handle edge cases safely
+
+## Implementation Guidelines
+
+### Test Isolation Patterns
+```ruby
+class Minitest::Spec
+  def setup
+    @temp_db_path = File.join(Dir.tmpdir, "test_#{SecureRandom.hex(8)}.db")
+    FileUtils.touch(@temp_db_path)
+    @db = SQLite3::Database.new(@temp_db_path)
+    initialize_schema(@temp_db_path)
+  end
+  
+  def teardown
+    @db.close if @db && !@db.closed?
+    File.unlink(@temp_db_path) if @temp_db_path && File.exist?(@temp_db_path)
+  end
+end
+```
+
+### Performance Optimization
+```ruby
+# Good: Proper mocking and sleep stubbing
+it 'handles retry logic with exponential backoff' do
+  client_mock = Minitest::Mock.new
+  client_mock.expect :upload_file, { 'id' => 'success' }, [String, String]
+  
+  upload = Upload.new({ database: @temp_db_path })
+  upload.stub :sleep, nil do
+    upload.run(['--folder-id', '123', '--max-retries', '3'], humata_client: client_mock)
+  end
+  
+  client_mock.verify
+end
+
+# Bad: Missing mock client (causes 35+ second timeouts)
+it 'handles upload with no pending files' do
+  upload = Upload.new({ database: @temp_db_path })
+  upload.run(['--folder-id', '123'])  # Creates real HTTP client!
+end
+```
+
+### Mock Client Patterns
+
+#### Simple Success Mock
+```ruby
+client_mock = Minitest::Mock.new
+client_mock.expect :upload_file, { 'id' => 'success' }, [String, String]
+```
+
+#### Error Simulation Mock
+```ruby
+client_mock = Object.new
+def client_mock.upload_file(url, folder_id)
+  raise ExternalService::Error, 'Service unavailable'
+end
+def client_mock.verify; end
+```
+
+#### Complex Scenario Mock
+```ruby
+client_mock = Class.new do
+  def initialize
+    @call_count = 0
+  end
+  
+  def upload_file(url, folder_id)
+    @call_count += 1
+    case @call_count
+    when 1
+      { 'id' => 'success-1' }
+    when 2
+      raise ExternalService::TransientError, 'Rate limit exceeded'
+    else
+      { 'id' => 'success-3' }
+    end
+  end
+  
+  def verify; end
+end.new
+```
+
+### Parallel Processing Testing
+```ruby
+# Mock-aware threading logic
+def process_uploads_parallel(client, files, options)
+  if is_mock_client?(client)
+    logger.info "Using sequential processing for mock client (testing mode)"
+    process_uploads_sequential(client, files, options)
+  else
+    logger.info "Using parallel processing for real client"
+    process_uploads_with_threads(client, files, options)
+  end
+end
+
+def is_mock_client?(client)
+  (client.class.name&.include?('Mock') ||
+   client.respond_to?(:verify) ||
+   (client.respond_to?(:upload_file) && !client.respond_to?(:instance_variable_get)))
+end
+```
+
+## Critical Examples
+
+### ✅ Good: Complete Test Implementation
+```ruby
+it 'processes files with controlled threading' do
+  client_mock = create_mock_client
+  upload = Upload.new({ database: @temp_db_path })
+  upload.run(['--folder-id', 'test-123', '--threads', '1'], humata_client: client_mock)
+  verify_processing_results
+end
+
+it 'handles concurrent database updates safely' do
+  threads = []
+  results = []
+  
+  10.times do |i|
+    thread = Thread.new do
+      result = upload.update_status("file_#{i}", "completed")
+      results << result
+    end
+    threads << thread
+  end
+  
+  threads.each(&:join)
+  _(results.size).must_equal 10
+end
+```
+
+### ❌ Bad: Common Pitfalls
+```ruby
+# Shared database state
+class Minitest::Spec
+  def before_all
+    @db_path = "test.db"  # Shared between all tests!
+    @db = SQLite3::Database.new(@db_path)
+  end
+end
+
+# Real HTTP calls in tests
+it 'uploads file' do
+  upload.run(['--folder-id', '123'])  # Makes real API calls!
+end
+
+# Unstubbed sleep calls
+it 'handles retry delays' do
+  upload.run(['--retry-delay', '5'])  # Test will hang!
+end
+
+# Real threading with mock clients
+it 'processes files in parallel' do
+  client_mock = create_mock_client
+  upload.run(['--folder-id', 'test-123', '--threads', '4'], humata_client: client_mock)
+end
+```
+
+## Testing Requirements
+
+### Performance Targets
+- **Unit tests**: Must complete in < 0.1 seconds
+- **Integration tests**: Must complete in < 1.0 seconds  
+- **Full test suites**: Must complete in < 10 seconds
+
+### Isolation Requirements
+- Each test must start with clean state
+- No test data must persist between tests
+- All external resources must be properly mocked
+- All time delays must be stubbed or faked
+
+### Parallel Processing Requirements
+- Threading logic must detect and handle mock clients
+- Tests must use controlled thread counts
+- Resource isolation must be verified
+- Thread-safe mock detection must be implemented
+
+## Enforcement
+- Code review must reject tests without proper mocking
+- Tests taking > 1 second must be investigated for missing mocks
+- All external service calls must use mock clients
+- All retry-related tests must stub sleep calls
+- Parallel processing code must detect mock clients
+
+## Benefits
+- **Fast Execution**: Sub-second test completion
+- **Reliable Results**: No flaky tests due to external dependencies
+- **Easy Debugging**: Clear test isolation and predictable behavior
+- **Better Performance**: Reduced CI/CD pipeline times
+- **Maintainable Code**: Clear separation of concerns
+- **Thread Safety**: Proper handling of concurrent operations
+
+## Notes
+- This rule consolidates multiple testing-related rules for better maintainability
+- Based on successful testing of duplicate detection system
+- Critical for preventing 35+ second test timeouts
+- Essential for maintaining fast, reliable test suites
+- Covers both sequential and parallel testing scenarios
+description:
+globs:
+alwaysApply: true
+---

@@ -1,0 +1,222 @@
+# Database Management Rule
+
+## Description
+This rule establishes comprehensive database management practices covering schema migrations, performance optimization, and data integrity, based on successful implementation of the Humata Import duplicate detection system.
+
+## Rule
+When managing databases in Ruby applications:
+
+1. **Schema Migration Requirements**
+   - MUST create or update schema update scripts for any schema changes
+   - MUST place scripts in `scripts/update_schema.rb` for consistency
+   - MUST ensure migrations are idempotent (safe to run multiple times)
+   - MUST update both migration script and schema initialization code
+
+2. **Migration Strategy**
+   - MUST use additive-only migrations (ADD COLUMN, CREATE INDEX)
+   - MUST NEVER modify existing data or drop columns
+   - MUST create automatic backups before any schema changes
+   - MUST implement backup restoration on failure
+
+3. **Performance Optimization**
+   - MUST create composite indexes for multi-column queries
+   - MUST index frequently queried columns (e.g., `file_hash`)
+   - MUST use covering indexes when possible
+   - MUST achieve < 100ms for critical operations on 10,000+ records
+
+4. **Data Integrity**
+   - MUST validate data consistency after migrations
+   - MUST use appropriate data types (TEXT for hashes, INTEGER for counts)
+   - MUST implement proper error handling and rollback mechanisms
+   - MUST test migrations on existing databases
+
+## Implementation Guidelines
+
+### Schema Update Script Structure
+```ruby
+class SchemaUpdater
+  def initialize(db_path = './import_session.db')
+    @db_path = db_path
+    @db = nil
+  end
+
+  def run
+    create_backup
+    apply_schema_updates
+    verify_schema
+    cleanup_backup
+  rescue => e
+    restore_backup
+    raise
+  end
+end
+```
+
+### Backup Management
+```ruby
+def create_backup
+  backup_path = "#{@db_path}.backup.#{Time.now.to_i}"
+  FileUtils.cp(@db_path, backup_path)
+  @backup_path = backup_path
+end
+
+def restore_backup
+  return unless backup_exists?
+  FileUtils.cp(@backup_path, @db_path)
+end
+```
+
+### Schema Updates
+```ruby
+def add_missing_column(column_name, column_type)
+  return 0 if column_exists?(column_name)
+  
+  @db.execute("ALTER TABLE file_records ADD COLUMN #{column_name} #{column_type}")
+  puts "✅ Added column '#{column_name}'"
+  return 1
+end
+
+def add_missing_index(index_name, columns)
+  return 0 if index_exists?(index_name)
+  
+  @db.execute("CREATE INDEX #{index_name} ON file_records (#{columns})")
+  puts "✅ Added index '#{index_name}'"
+  return 1
+end
+```
+
+## Performance Optimization
+
+### Index Design
+```sql
+-- For duplicate detection queries
+CREATE INDEX idx_files_duplicate_detection ON file_records(size, name, mime_type);
+
+-- For hash-based lookups
+CREATE INDEX idx_files_file_hash ON file_records(file_hash);
+
+-- For relationship tracking
+CREATE INDEX idx_files_duplicate_of ON file_records(duplicate_of_gdrive_id);
+```
+
+### Query Optimization
+```ruby
+# Good: Single query with proper indexing
+def find_duplicates_by_hash(db, file_hash)
+  db.execute(<<-SQL, [file_hash])
+    SELECT gdrive_id, name, size, mime_type, discovered_at
+    FROM file_records 
+    WHERE file_hash = ?
+    ORDER BY discovered_at ASC
+  SQL
+end
+
+# Bad: Multiple queries in loop (N+1 problem)
+def find_duplicates_inefficient(db, file_hashes)
+  file_hashes.map { |hash| db.execute("SELECT * FROM file_records WHERE file_hash = ?", [hash]) }
+end
+```
+
+### Bulk Operations
+```ruby
+# Good: Batch updates for performance
+def populate_file_hashes_batch(db, records)
+  db.transaction do
+    records.each_slice(1000) do |batch|
+      batch.each { |record| update_record_hash(db, record) }
+    end
+  end
+end
+```
+
+## Migration Workflow
+
+### 1. Schema Update
+```bash
+ruby scripts/update_schema.rb [database_path]
+# Creates backup, adds missing columns/indexes, provides feedback
+```
+
+### 2. Data Population (if needed)
+```bash
+ruby scripts/populate_data.rb [database_path]
+# Populates data for new schema efficiently
+```
+
+### 3. Validation
+```bash
+ruby scripts/validate_migration.rb [database_path]
+# Verifies migration success and data integrity
+```
+
+## Examples
+
+### ✅ Good: Complete Migration Implementation
+```ruby
+# 1. Update lib/humata_import/database.rb
+def self.initialize_schema(db_path)
+  db = connect(db_path)
+  db.execute_batch <<-SQL
+    CREATE TABLE IF NOT EXISTS file_records (
+      id INTEGER PRIMARY KEY,
+      gdrive_id TEXT UNIQUE,
+      name TEXT,
+      size INTEGER,
+      mime_type TEXT,
+      file_hash TEXT,
+      duplicate_of_gdrive_id TEXT
+    );
+  SQL
+  db.close
+end
+
+# 2. Update scripts/update_schema.rb
+def add_missing_column(column_name, column_type)
+  if column_exists?(column_name)
+    puts "✓ Column '#{column_name}' already exists"
+    return 0
+  end
+  @db.execute("ALTER TABLE file_records ADD COLUMN #{column_name} #{column_type}")
+  return 1
+end
+```
+
+### ❌ Bad: Missing Migration
+```ruby
+# Direct schema change without updating both files
+class Verify < Base
+  def run(args)
+    # This would fail on existing databases without the new column
+    @db.execute("UPDATE file_records SET file_hash = ? WHERE id = ?", [hash, id])
+  end
+end
+```
+
+## Performance Targets
+- **Duplicate Detection**: < 100ms for 10,000+ records
+- **Individual Lookups**: < 10ms average
+- **Bulk Operations**: Linear scaling with dataset size
+- **Memory Usage**: Constant regardless of dataset size
+
+## Benefits
+- **Data Consistency**: Ensures existing databases can be upgraded
+- **Backup Safety**: Automatic backup creation and restoration
+- **Performance**: Optimized queries with proper indexing
+- **Simplicity**: Easy to understand and maintain
+- **Team Collaboration**: Consistent database management patterns
+
+## Enforcement
+- Code review must reject schema changes without updating both migration script and schema initialization
+- All database operations must use appropriate indexes
+- Performance targets must be met consistently
+- Migration scripts must be tested on existing databases
+
+## Notes
+- Based on successful implementation of duplicate detection system with 15,702 files
+- Provides comprehensive database management in a single rule
+- Covers both simple script-based and framework-based approaches
+- Essential for maintaining data consistency and performance
+description:
+globs:
+alwaysApply: true
+---

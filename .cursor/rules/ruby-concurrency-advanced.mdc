@@ -1,0 +1,262 @@
+# Ruby Concurrency Advanced Rule
+
+## Description
+This rule establishes advanced standards for implementing complex concurrent operations in Ruby, covering rate limiting, thread pools, and advanced synchronization patterns.
+
+## Rule
+When implementing advanced concurrent operations in Ruby:
+
+1. **Rate Limiting and Backoff**
+   - MUST distribute rate limits across threads appropriately
+   - MUST implement per-thread rate limiting for external APIs
+   - MUST use exponential backoff patterns for retryable errors
+   - MUST respect API rate limits while maximizing throughput
+
+2. **Thread Pool and Batch Processing**
+   - MUST properly join threads to prevent zombie threads
+   - MUST implement graceful shutdown mechanisms
+   - MUST handle thread interruption signals appropriately
+   - MUST ensure resource cleanup even when threads fail
+
+3. **Advanced Synchronization**
+   - MUST use appropriate synchronization primitives (mutexes, condition variables)
+   - MUST implement producer-consumer patterns safely
+   - MUST handle thread starvation and deadlock prevention
+   - MUST use atomic operations when possible
+
+## Implementation Guidelines
+
+### Rate Limiting Distribution
+```ruby
+class ThreadLocalRateLimiter
+  def initialize(thread_id, base_rate_limit, thread_count)
+    @thread_rate_limit = base_rate_limit / thread_count
+    @last_request_time = nil
+  end
+  
+  def enforce_rate_limit
+    return unless @last_request_time
+    
+    elapsed = Time.now - @last_request_time
+    min_interval = 60.0 / @thread_rate_limit
+    
+    if elapsed < min_interval
+      sleep(min_interval - elapsed)
+    end
+    
+    @last_request_time = Time.now
+  end
+end
+```
+
+### Thread Pool with Batch Processing
+```ruby
+class ThreadPoolUpload
+  def initialize(thread_count: 4, batch_size: 10)
+    @thread_count = thread_count
+    @batch_size = batch_size
+    @mutex = Mutex.new
+    @results = []
+  end
+  
+  def process_files(files)
+    files.each_slice(@batch_size) { |batch| process_batch(batch) }
+    @results
+  end
+  
+  private
+  
+  def process_batch(batch)
+    threads = []
+    
+    batch.each_with_index do |file, index|
+      thread = Thread.new { process_single_file(file, index) }
+      threads << thread
+      
+      if threads.size >= @thread_count
+        threads.shift.join
+      end
+    end
+    
+    threads.each(&:join)
+  end
+end
+```
+
+### Producer-Consumer Pattern
+```ruby
+class ProducerConsumer
+  def initialize(queue_size: 100)
+    @queue = Queue.new
+    @max_size = queue_size
+    @mutex = Mutex.new
+    @condition = ConditionVariable.new
+  end
+  
+  def produce(item)
+    @mutex.synchronize do
+      while @queue.size >= @max_size
+        @condition.wait(@mutex)
+      end
+      @queue << item
+      @condition.signal
+    end
+  end
+  
+  def consume
+    @mutex.synchronize do
+      while @queue.empty?
+        @condition.wait(@mutex)
+      end
+      @queue.pop
+    end
+  end
+end
+```
+
+## Examples
+
+### ✅ Good: Advanced Thread Pool Implementation
+```ruby
+class AdvancedThreadPool
+  def initialize(thread_count: 4)
+    @thread_count = thread_count
+    @queue = Queue.new
+    @threads = []
+    @shutdown = false
+    @mutex = Mutex.new
+    
+    start_workers
+  end
+  
+  def submit(task)
+    return if @shutdown
+    @queue << task
+  end
+  
+  def shutdown
+    @mutex.synchronize do
+      @shutdown = true
+      @thread_count.times { @queue << :shutdown }
+    end
+    
+    @threads.each(&:join)
+  end
+  
+  private
+  
+  def start_workers
+    @thread_count.times do |i|
+      thread = Thread.new { worker_loop(i) }
+      @threads << thread
+    end
+  end
+  
+  def worker_loop(worker_id)
+    loop do
+      task = @queue.pop
+      break if task == :shutdown
+      
+      begin
+        task.call
+      rescue => e
+        logger.error "Worker #{worker_id} failed: #{e.message}"
+      end
+    end
+  end
+end
+```
+
+### ❌ Bad: Poor Thread Management
+```ruby
+class PoorThreadPool
+  def initialize(thread_count: 4)
+    @thread_count = thread_count
+    @threads = []
+  end
+  
+  def process_files(files)
+    files.each do |file|
+      thread = Thread.new { process_file(file) }
+      @threads << thread
+    end
+    
+    # No thread joining - potential resource leaks
+    # No error handling
+    # No graceful shutdown
+  end
+end
+```
+
+## Advanced Patterns
+
+### Graceful Shutdown
+```ruby
+def graceful_shutdown
+  @shutdown_requested = true
+  
+  # Wait for current operations to complete
+  @active_threads.each(&:join)
+  
+  # Clean up resources
+  cleanup_resources
+end
+
+def process_with_shutdown_check
+  return if @shutdown_requested
+  
+  # Process operation
+  perform_operation
+end
+```
+
+### Thread Monitoring
+```ruby
+class ThreadMonitor
+  def initialize
+    @thread_stats = {}
+    @mutex = Mutex.new
+  end
+  
+  def track_thread(thread_id, start_time)
+    @mutex.synchronize do
+      @thread_stats[thread_id] = { start_time: start_time, status: 'running' }
+    end
+  end
+  
+  def thread_completed(thread_id, end_time)
+    @mutex.synchronize do
+      if @thread_stats[thread_id]
+        @thread_stats[thread_id].merge!(
+          end_time: end_time,
+          status: 'completed',
+          duration: end_time - @thread_stats[thread_id][:start_time]
+        )
+      end
+    end
+  end
+end
+```
+
+## Benefits
+- **Advanced concurrency patterns** for complex scenarios
+- **Better resource management** with thread pools
+- **Improved performance** with rate limiting and batching
+- **Professional-grade** concurrent code
+- **Scalable architecture** for high-throughput applications
+
+## Enforcement
+- Advanced concurrency code must demonstrate proper resource management
+- Thread pools must implement graceful shutdown mechanisms
+- Rate limiting must be properly distributed across threads
+- Producer-consumer patterns must be thread-safe
+
+## Notes
+- This rule focuses on advanced concurrency patterns
+- Complements `ruby-concurrency-basics.mdc` for fundamental patterns
+- Essential for high-performance concurrent applications
+- Based on successful implementation of advanced threading in duplicate detection system
+description:
+globs:
+alwaysApply: true
+---

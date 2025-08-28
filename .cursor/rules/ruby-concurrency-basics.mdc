@@ -1,0 +1,187 @@
+# Ruby Concurrency Basics Rule
+
+## Description
+This rule establishes basic standards for implementing thread-safe concurrent operations in Ruby, focusing on fundamental patterns and safety requirements.
+
+## Rule
+When implementing concurrent operations in Ruby:
+
+1. **Thread Safety Fundamentals**
+   - MUST ensure database operations are thread-safe using proper synchronization
+   - MUST use thread-local resources for HTTP clients and database connections
+   - MUST avoid shared mutable state between threads
+   - MUST use mutexes for any shared resource access
+
+2. **Resource Management**
+   - MUST create separate instances of external clients per thread
+   - MUST ensure proper cleanup of thread-local resources
+   - MUST avoid global state and singletons in threaded code
+   - MUST use dependency injection for thread-local resources
+
+3. **Error Handling**
+   - MUST isolate errors between threads (one thread's failure shouldn't affect others)
+   - MUST implement thread-safe error logging and aggregation
+   - MUST handle thread failures gracefully without crashing the entire process
+   - MUST provide clear error reporting for debugging concurrent issues
+
+## Implementation Guidelines
+
+### Thread Safety Patterns
+```ruby
+# Thread-safe database operations
+class ThreadSafeUpload
+  def initialize
+    @mutex = Mutex.new
+  end
+  
+  def update_database(record)
+    @mutex.synchronize do
+      @db.execute("UPDATE files SET status = ? WHERE id = ?", [record.status, record.id])
+    end
+  end
+end
+```
+
+### Thread-Local Resources
+```ruby
+def process_in_thread(thread_id)
+  thread_db = create_thread_database_connection
+  thread_client = create_thread_client
+  
+  begin
+    result = process_file(thread_client, thread_db)
+    aggregate_result(result)
+  ensure
+    thread_db.close if thread_db.respond_to?(:close)
+  end
+end
+
+def create_thread_client(base_client)
+  HumataImport::Clients::HumataClient.new(
+    api_key: base_client.api_key,
+    base_url: base_client.base_url
+  )
+end
+
+def get_thread_database_connection
+  HumataImport::Database.connect(@database_path)
+end
+```
+
+### Error Isolation
+```ruby
+def process_batch_parallel(batch, options)
+  threads = []
+  results = []
+  mutex = Mutex.new
+  
+  batch.each_with_index do |file_data, index|
+    thread = Thread.new do
+      begin
+        result = process_single_file_threaded(file_data, options, index)
+        mutex.synchronize { results << result }
+      rescue => e
+        mutex.synchronize { results << { error: e, file_data: file_data } }
+        logger.error "Thread #{index} failed: #{e.message}"
+      end
+    end
+    threads << thread
+  end
+  
+  threads.each(&:join)
+  process_batch_results(results)
+end
+```
+
+## Examples
+
+### ✅ Good: Thread-Safe Implementation
+```ruby
+class ParallelUpload
+  def initialize(options)
+    @thread_count = options[:threads] || 4
+    @mutex = Mutex.new
+    @results = []
+  end
+  
+  def process_files(files)
+    threads = []
+    
+    files.each_slice(@thread_count) do |batch|
+      batch.each_with_index do |file, index|
+        thread = Thread.new { process_file_safely(file, index) }
+        threads << thread
+      end
+      threads.each(&:join)
+      threads.clear
+    end
+    
+    @results
+  end
+  
+  private
+  
+  def process_file_safely(file, thread_id)
+    client = create_thread_client
+    db = get_thread_database_connection
+    
+    begin
+      result = upload_file(client, file)
+      @mutex.synchronize { @results << result }
+    rescue => e
+      @mutex.synchronize { @results << { error: e, file: file } }
+    ensure
+      cleanup_thread_resources(client, db)
+    end
+  end
+end
+```
+
+### ❌ Bad: Thread-Unsafe Implementation
+```ruby
+class UnsafeParallelUpload
+  def initialize
+    @shared_client = HumataClient.new  # Shared resource
+    @shared_db = Database.connect      # Shared resource
+    @results = []                      # Shared mutable state
+  end
+  
+  def process_files(files)
+    threads = []
+    
+    files.each do |file|
+      thread = Thread.new do
+        result = @shared_client.upload_file(file)
+        @results << result  # Race condition!
+      end
+      threads << thread
+    end
+    
+    threads.each(&:join)
+    @results
+  end
+end
+```
+
+## Benefits
+- **Reliable concurrent processing** with proper resource isolation
+- **Predictable performance scaling** without race conditions
+- **Easier debugging** of concurrent issues
+- **Better resource utilization** with thread-local resources
+- **Maintainable concurrent code** with clear safety patterns
+
+## Enforcement
+- Code review must reject threaded code that doesn't follow thread safety patterns
+- All concurrent operations must demonstrate proper resource isolation
+- Thread error handling must be implemented and tested
+- Resource cleanup must be verified for all concurrent operations
+
+## Notes
+- This rule focuses on fundamental concurrency patterns
+- Complements `ruby-concurrency-advanced.mdc` for advanced patterns
+- Essential for maintaining system stability in concurrent environments
+- Based on successful implementation of parallel processing in duplicate detection system
+description:
+globs:
+alwaysApply: true
+---
