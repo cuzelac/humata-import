@@ -71,15 +71,16 @@ rake install
    export GOOGLE_APPLICATION_CREDENTIALS='path/to/service-account-key.json'
    ```
 
-2. **Run complete workflow with duplicate detection**
+2. **Run complete workflow**
    ```bash
    humata-import run \
      "https://drive.google.com/drive/folders/your-folder-id" \
      --folder-id "your-humata-folder-id" \
      --database ./import_session.db \
-     --duplicate-strategy skip \
      --verbose
    ```
+
+   **Note**: The `run` command executes the complete workflow but doesn't support duplicate strategy options. Use the individual `discover` command for duplicate detection configuration.
 
 ## Usage
 
@@ -89,7 +90,6 @@ rake install
    ```bash
    humata-import discover \
      "https://drive.google.com/drive/folders/your-folder-id" \
-     --file-types pdf,doc,docx \
      --database ./import_session.db \
      --duplicate-strategy skip \
      --show-duplicates
@@ -101,6 +101,11 @@ rake install
    - `--duplicate-strategy replace` - Replace existing files with duplicates
    - `--show-duplicates` - Display detailed duplicate information
 
+   **Additional discover options:**
+   - `--recursive` / `--no-recursive` - Control subfolder crawling (default: recursive)
+   - `--max-files N` - Limit number of files to discover
+   - `--timeout SECONDS` - Discovery timeout (default: 300s)
+
 2. **Upload files**
    ```bash
    humata-import upload \
@@ -108,6 +113,15 @@ rake install
      --batch-size 10 \
      --database ./import_session.db
    ```
+
+   **Upload options:**
+   - `--folder-id ID` - Humata folder ID (required)
+   - `--batch-size N` - Number of files to process in parallel (default: 10)
+   - `--threads N` - Number of concurrent upload threads (default: 4, max: 16)
+   - `--max-retries N` - Maximum retry attempts per file (default: 3)
+   - `--retry-delay N` - Base delay in seconds between retries (default: 5)
+   - `--id ID` - Upload only the file with this specific gdrive_id
+   - `--skip-retries` - Skip retrying failed uploads
 
    **Retry failed uploads:**
    ```bash
@@ -131,6 +145,11 @@ rake install
      --database ./import_session.db
    ```
 
+   **Verify options:**
+   - `--poll-interval N` - Seconds between status checks (default: 10)
+   - `--timeout N` - Verification timeout in seconds (default: 1800)
+   - `--batch-size N` - Number of files to check in parallel (default: 10)
+
 4. **Check status and duplicates**
    ```bash
    # Overall status
@@ -149,6 +168,12 @@ rake install
      --output status_report.csv \
      --database ./import_session.db
    ```
+
+   **Status options:**
+   - `--format FORMAT` - Output format (text/json/csv, default: text)
+   - `--output FILE` - Write output to file
+   - `--filter STATUS` - Filter by status (completed/failed/pending/processing)
+   - `--failed-only` - Show only failed uploads with retry information
 
 ### Duplicate Detection Features
 
