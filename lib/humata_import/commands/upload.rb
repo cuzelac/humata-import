@@ -108,7 +108,7 @@ module HumataImport
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Base delay in seconds between retries (default: 5)') { |v| options[:retry_delay] = v }
           opts.on('--skip-retries', 'Skip retrying failed uploads') { options[:skip_retries] = true }
-          opts.on('--duplicate-strategy STRATEGY', %w[skip-duplicates upload-all upload-originals-only], 'How to handle duplicate files (default: skip-duplicates)') { |v| options[:duplicate_strategy] = v }
+          opts.on('--duplicate-strategy STRATEGY', %w[skip-duplicates upload-all], 'How to handle duplicate files (default: skip-duplicates)') { |v| options[:duplicate_strategy] = v }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-q', '--quiet', 'Suppress non-essential output') { options[:quiet] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
@@ -246,8 +246,6 @@ module HumataImport
         case duplicate_strategy
         when 'skip-duplicates'
           base_conditions += " AND duplicate_of_gdrive_id IS NULL"
-        when 'upload-originals-only'
-          base_conditions += " AND duplicate_of_gdrive_id IS NULL"
         when 'upload-all'
           # No additional conditions - include all files
         else
@@ -298,10 +296,6 @@ module HumataImport
         # Provide guidance based on strategy
         case duplicate_strategy
         when 'skip-duplicates'
-          if duplicate_files > 0
-            logger.info "⚠️  Skipping #{duplicate_files} duplicate files (use --duplicate-strategy upload-all to include them)"
-          end
-        when 'upload-originals-only'
           if duplicate_files > 0
             logger.info "⚠️  Skipping #{duplicate_files} duplicate files (use --duplicate-strategy upload-all to include them)"
           end

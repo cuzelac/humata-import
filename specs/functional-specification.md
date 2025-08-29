@@ -156,7 +156,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - `--max-retries N`: Maximum retry attempts (default: 3)
 - `--retry-delay N`: Seconds between retries (default: 5)
 - `--skip-retries`: Skip retrying failed uploads
-- `--duplicate-strategy STRATEGY`: How to handle duplicate files (skip-duplicates, upload-all, upload-originals-only, default: skip-duplicates)
+- `--duplicate-strategy STRATEGY`: How to handle duplicate files (skip-duplicates, upload-all, default: skip-duplicates)
 - `--verbose, -v`: Enable verbose output
 - `--quiet, -q`: Suppress non-essential output
 
@@ -188,7 +188,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
   - `--duplicate-strategy STRATEGY`: Control how duplicate files are handled during upload
   - `skip-duplicates`: Skip uploading files marked as duplicates (default)
   - `upload-all`: Upload all files regardless of duplicate status
-  - `upload-originals-only`: Only upload original files, skip duplicates
+  
 - **Duplicate Relationship Tracking**: Maintain relationships between original and duplicate files
   - Files with `duplicate_of_gdrive_id` set are identified as duplicates
   - Original files (no `duplicate_of_gdrive_id`) are processed normally
@@ -199,7 +199,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
   - Maintain data consistency across duplicate sets
 - **Database Query Optimization**: Upload queries respect duplicate status
   - When `skip-duplicates` is enabled, exclude files with `duplicate_of_gdrive_id` set
-  - When `upload-originals-only` is enabled, only process files without `duplicate_of_gdrive_id`
+  
   - When `upload-all` is enabled, process all files regardless of duplicate status
 - **User Experience**: Clear feedback on duplicate handling
   - Report number of duplicates skipped during upload
@@ -683,7 +683,7 @@ humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-dela
 # Duplicate handling examples
 humata-import upload --folder-id abc123 --duplicate-strategy skip-duplicates
 humata-import upload --folder-id abc123 --duplicate-strategy upload-all
-humata-import upload --folder-id abc123 --duplicate-strategy upload-originals-only
+humata-import upload --folder-id abc123 --duplicate-strategy skip-duplicates
 
 # Combined duplicate and performance settings
 humata-import upload --folder-id abc123 --duplicate-strategy skip-duplicates --threads 8 --batch-size 20
