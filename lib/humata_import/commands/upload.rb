@@ -34,13 +34,13 @@ require 'logger'
 module HumataImport
   module Commands
     # Command for uploading discovered files to Humata.ai.
-# Handles batch processing, rate limiting, response storage, and parallel processing.
-#
-# Database Field Usage:
-#   - last_error: TODO: Rename to 'upload_error' - stores error message when upload fails,
-#     gets cleared (set to NULL) when upload succeeds. This field tracks upload-specific
-#     failures and is distinct from processing_status which tracks Humata processing state.
-class Upload < Base
+    # Handles batch processing, rate limiting, response storage, and parallel processing.
+    #
+    # Database Field Usage:
+    #   - last_error: TODO: Rename to 'upload_error' - stores error message when upload fails,
+    #     gets cleared (set to NULL) when upload succeeds. This field tracks upload-specific
+    #     failures and is distinct from processing_status which tracks Humata processing state.
+    class Upload < Base
       # @return [Integer] Default number of concurrent threads
       DEFAULT_THREADS = 4
       
@@ -94,6 +94,7 @@ class Upload < Base
           max_retries: DEFAULT_MAX_RETRIES,
           retry_delay: DEFAULT_RETRY_DELAY,
           skip_retries: false,
+          duplicate_strategy: 'skip-duplicates',
           verbose: @options[:verbose],
           quiet: @options[:quiet]
         }
@@ -107,6 +108,7 @@ class Upload < Base
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Base delay in seconds between retries (default: 5)') { |v| options[:retry_delay] = v }
           opts.on('--skip-retries', 'Skip retrying failed uploads') { options[:skip_retries] = true }
+          opts.on('--duplicate-strategy STRATEGY', %w[skip-duplicates upload-all upload-originals-only], 'How to handle duplicate files (default: skip-duplicates)') { |v| options[:duplicate_strategy] = v }
           opts.on('-v', '--verbose', 'Enable verbose output') { options[:verbose] = true }
           opts.on('-q', '--quiet', 'Suppress non-essential output') { options[:quiet] = true }
           opts.on('-h', '--help', 'Show help') { puts opts; exit }
@@ -201,7 +203,7 @@ class Upload < Base
         if options[:file_id]
           get_specific_file(options[:file_id])
         else
-          get_all_pending_files(options[:skip_retries])
+          get_all_pending_files(options[:skip_retries], options[:duplicate_strategy])
         end
       end
 
@@ -228,13 +230,32 @@ class Upload < Base
       # Gets all pending files from the database.
       #
       # @param skip_retries [Boolean] Whether to skip retrying failed uploads
+      # @param duplicate_strategy [String] How to handle duplicate files
       # @return [Array<Array>] Array of pending file records
-      def get_all_pending_files(skip_retries)
-        sql = if skip_retries
-          "SELECT * FROM file_records WHERE humata_id IS NULL AND upload_status = 'pending' AND processing_status IS NULL"
+      def get_all_pending_files(skip_retries, duplicate_strategy = 'skip-duplicates')
+        base_conditions = "humata_id IS NULL"
+        
+        # Add upload status conditions
+        if skip_retries
+          base_conditions += " AND (upload_status = 'pending' AND processing_status IS NULL)"
         else
-          "SELECT * FROM file_records WHERE humata_id IS NULL AND (upload_status = 'pending' OR upload_status = 'failed')"
+          base_conditions += " AND (upload_status = 'pending' OR upload_status = 'failed')"
         end
+        
+        # Add duplicate handling conditions based on strategy
+        case duplicate_strategy
+        when 'skip-duplicates'
+          base_conditions += " AND duplicate_of_gdrive_id IS NULL"
+        when 'upload-originals-only'
+          base_conditions += " AND duplicate_of_gdrive_id IS NULL"
+        when 'upload-all'
+          # No additional conditions - include all files
+        else
+          # Default to skip-duplicates behavior
+          base_conditions += " AND duplicate_of_gdrive_id IS NULL"
+        end
+        
+        sql = "SELECT * FROM file_records WHERE #{base_conditions}"
         pending_files = @db.execute(sql)
 
         if pending_files.empty?
@@ -242,7 +263,53 @@ class Upload < Base
           return []
         end
 
+        # Log duplicate handling information
+        log_duplicate_handling_info(pending_files, duplicate_strategy)
+
         pending_files
+      end
+
+      # Logs information about duplicate handling during upload.
+      #
+      # @param pending_files [Array<Array>] Array of pending file records
+      # @param duplicate_strategy [String] The duplicate handling strategy being used
+      # @return [void]
+      def log_duplicate_handling_info(pending_files, duplicate_strategy)
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        
+        # Count files by duplicate status
+        total_files = pending_files.size
+        original_files = 0
+        duplicate_files = 0
+        
+        pending_files.each do |file_data|
+          file_hash = columns.zip(file_data).to_h
+          if file_hash['duplicate_of_gdrive_id']
+            duplicate_files += 1
+          else
+            original_files += 1
+          end
+        end
+        
+        # Log strategy and counts
+        logger.info "Duplicate handling strategy: #{duplicate_strategy}"
+        logger.info "Files to upload: #{total_files} total (#{original_files} originals, #{duplicate_files} duplicates)"
+        
+        # Provide guidance based on strategy
+        case duplicate_strategy
+        when 'skip-duplicates'
+          if duplicate_files > 0
+            logger.info "⚠️  Skipping #{duplicate_files} duplicate files (use --duplicate-strategy upload-all to include them)"
+          end
+        when 'upload-originals-only'
+          if duplicate_files > 0
+            logger.info "⚠️  Skipping #{duplicate_files} duplicate files (use --duplicate-strategy upload-all to include them)"
+          end
+        when 'upload-all'
+          if duplicate_files > 0
+            logger.info "📋 Including #{duplicate_files} duplicate files in upload (may result in redundant processing)"
+          end
+        end
       end
 
       # Processes the uploads in parallel using multiple threads.
@@ -552,7 +619,7 @@ class Upload < Base
         end
       end
 
-      # Handles permanent errors (thread-safe).
+      # Handles permanent errors in threaded processing.
       #
       # @param thread_db [SQLite3::Database] Thread-local database connection
       # @param gdrive_id [String] Google Drive file ID
@@ -565,7 +632,7 @@ class Upload < Base
         logger.error "[Thread-#{thread_id}] ✗ Permanent error for: #{name} - #{error.message}"
       end
 
-      # Handles unexpected errors (thread-safe).
+      # Handles unexpected errors in threaded processing.
       #
       # @param thread_db [SQLite3::Database] Thread-local database connection
       # @param gdrive_id [String] Google Drive file ID
@@ -601,6 +668,7 @@ class Upload < Base
         columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
         retry_count = 0
         new_count = 0
+        duplicate_count = 0
 
         pending_files.each do |file_data|
           file_hash = columns.zip(file_data).to_h
@@ -609,9 +677,13 @@ class Upload < Base
           else
             new_count += 1
           end
+          
+          if file_hash['duplicate_of_gdrive_id']
+            duplicate_count += 1
+          end
         end
 
-        logger.info "Found #{pending_files.size} files to process: #{new_count} new, #{retry_count} retries"
+        logger.info "Found #{pending_files.size} files to process: #{new_count} new, #{retry_count} retries, #{duplicate_count} duplicates"
       end
 
       # Processes the uploads in batches (legacy method for backward compatibility).

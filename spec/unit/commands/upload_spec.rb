@@ -685,6 +685,189 @@ module HumataImport
         
         client_mock.verify
       end
+
+      # Duplicate handling tests
+      it 'skips duplicate files by default (skip-duplicates strategy)' do
+        # Create original file
+        create_test_file(@db, { 
+          name: 'original.pdf', 
+          url: 'https://example.com/original.pdf',
+          file_hash: 'hash123'
+        })
+        
+        # Create duplicate file
+        create_test_file(@db, { 
+          name: 'duplicate.pdf', 
+          url: 'https://example.com/duplicate.pdf',
+          file_hash: 'hash123',
+          duplicate_of_gdrive_id: 'gdrive_original_123'
+        })
+
+        # Create mock client
+        client_mock = Minitest::Mock.new
+        # Should only be called once for the original file
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+
+        upload = Upload.new({ database: @temp_db_path })
+        upload.run(['--folder-id', @folder_id, '--threads', '1'], humata_client: client_mock)
+
+        # Verify only original file was uploaded
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 2
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        original_file = files.find { |f| columns.zip(f).to_h['duplicate_of_gdrive_id'].nil? }
+        duplicate_file = files.find { |f| columns.zip(f).to_h['duplicate_of_gdrive_id'] }
+        
+        _(columns.zip(original_file).to_h['humata_id']).must_equal 'humata-1'
+        _(columns.zip(duplicate_file).to_h['humata_id']).must_be_nil
+        
+        client_mock.verify
+      end
+
+      it 'uploads all files including duplicates with upload-all strategy' do
+        # Create original file
+        create_test_file(@db, { 
+          name: 'original.pdf', 
+          url: 'https://example.com/original.pdf',
+          file_hash: 'hash123'
+        })
+        
+        # Create duplicate file
+        create_test_file(@db, { 
+          name: 'duplicate.pdf', 
+          url: 'https://example.com/duplicate.pdf',
+          file_hash: 'hash123',
+          duplicate_of_gdrive_id: 'gdrive_original_123'
+        })
+
+        # Create mock client
+        client_mock = Minitest::Mock.new
+        # Should be called twice - once for each file
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-2' } } }, [String, @folder_id]
+
+        upload = Upload.new({ database: @temp_db_path })
+        upload.run(['--folder-id', @folder_id, '--duplicate-strategy', 'upload-all', '--threads', '1'], humata_client: client_mock)
+
+        # Verify both files were uploaded
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 2
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        original_file = files.find { |f| columns.zip(f).to_h['duplicate_of_gdrive_id'].nil? }
+        duplicate_file = files.find { |f| columns.zip(f).to_h['duplicate_of_gdrive_id'] }
+        
+        _(columns.zip(original_file).to_h['humata_id']).must_equal 'humata-1'
+        _(columns.zip(duplicate_file).to_h['humata_id']).must_equal 'humata-2'
+        
+        client_mock.verify
+      end
+
+      it 'uploads only original files with upload-originals-only strategy' do
+        # Create original file
+        create_test_file(@db, { 
+          name: 'original.pdf', 
+          url: 'https://example.com/original.pdf',
+          file_hash: 'hash123'
+        })
+        
+        # Create duplicate file
+        create_test_file(@db, { 
+          name: 'duplicate.pdf', 
+          url: 'https://example.com/duplicate.pdf',
+          file_hash: 'hash123',
+          duplicate_of_gdrive_id: 'gdrive_original_123'
+        })
+
+        # Create mock client
+        client_mock = Minitest::Mock.new
+        # Should only be called once for the original file
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+
+        upload = Upload.new({ database: @temp_db_path })
+        upload.run(['--folder-id', @folder_id, '--duplicate-strategy', 'upload-originals-only', '--threads', '1'], humata_client: client_mock)
+
+        # Verify only original file was uploaded
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 2
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        original_file = files.find { |f| columns.zip(f).to_h['duplicate_of_gdrive_id'].nil? }
+        duplicate_file = files.find { |f| columns.zip(f).to_h['duplicate_of_gdrive_id'] }
+        
+        _(columns.zip(original_file).to_h['humata_id']).must_equal 'humata-1'
+        _(columns.zip(duplicate_file).to_h['humata_id']).must_be_nil
+        
+        client_mock.verify
+      end
+
+      it 'handles invalid duplicate strategy gracefully' do
+        # Create test file
+        create_test_file(@db, { 
+          name: 'test.pdf', 
+          url: 'https://example.com/test.pdf'
+        })
+
+        # Create mock client
+        client_mock = Minitest::Mock.new
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+
+        upload = Upload.new({ database: @temp_db_path })
+        
+        # Test that invalid strategy raises an error (OptionParser validation)
+        assert_raises(OptionParser::InvalidArgument) do
+          upload.run(['--folder-id', @folder_id, '--duplicate-strategy', 'invalid-strategy', '--threads', '1'], humata_client: client_mock)
+        end
+        
+        # Verify the test file still exists and wasn't processed
+        files = @db.execute('SELECT * FROM file_records')
+        _(files.size).must_equal 1
+        
+        columns = @db.execute('PRAGMA table_info(file_records)').map { |col| col[1] }
+        file = columns.zip(files.first).to_h
+        _(file['humata_id']).must_be_nil # Should not have been processed
+        
+        # Don't verify client mock since it was never called
+      end
+
+      it 'reports duplicate handling information correctly' do
+        # Create original file
+        create_test_file(@db, { 
+          name: 'original.pdf', 
+          url: 'https://example.com/original.pdf',
+          file_hash: 'hash123'
+        })
+        
+        # Create duplicate file
+        create_test_file(@db, { 
+          name: 'duplicate.pdf', 
+          url: 'https://example.com/duplicate.pdf',
+          file_hash: 'hash123',
+          duplicate_of_gdrive_id: 'gdrive_original_123'
+        })
+
+        # Create mock client
+        client_mock = Minitest::Mock.new
+        client_mock.expect :upload_file, { 'data' => { 'pdf' => { 'id' => 'humata-1' } } }, [String, @folder_id]
+
+        upload = Upload.new({ database: @temp_db_path })
+        
+        # Capture log output to verify duplicate reporting
+        log_output = StringIO.new
+        upload.logger.stub :info, ->(msg) { log_output.puts msg } do
+          upload.run(['--folder-id', @folder_id, '--duplicate-strategy', 'skip-duplicates', '--threads', '1'], humata_client: client_mock)
+        end
+
+        log_content = log_output.string
+        
+        # Verify duplicate handling information is logged
+        _(log_content).must_include 'Duplicate handling strategy: skip-duplicates'
+        _(log_content).must_include 'Files to upload: 1 total (1 originals, 0 duplicates)'
+        _(log_content).must_include 'Found 1 files to process: 1 new, 0 retries, 0 duplicates'
+        
+        client_mock.verify
+      end
     end
   end
 end 

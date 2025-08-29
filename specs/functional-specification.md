@@ -156,6 +156,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - `--max-retries N`: Maximum retry attempts (default: 3)
 - `--retry-delay N`: Seconds between retries (default: 5)
 - `--skip-retries`: Skip retrying failed uploads
+- `--duplicate-strategy STRATEGY`: How to handle duplicate files (skip-duplicates, upload-all, upload-originals-only, default: skip-duplicates)
 - `--verbose, -v`: Enable verbose output
 - `--quiet, -q`: Suppress non-essential output
 
@@ -181,6 +182,29 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - **Current File Completion**: Allow current file upload to complete
 - **Database Consistency**: Ensure partial uploads are properly marked
 - **Recovery Instructions**: Provide clear guidance for resuming operations
+
+#### 3.3.6 Duplicate File Handling
+- **Duplicate Upload Strategy**: Configurable behavior for files marked as duplicates in the database
+  - `--duplicate-strategy STRATEGY`: Control how duplicate files are handled during upload
+  - `skip-duplicates`: Skip uploading files marked as duplicates (default)
+  - `upload-all`: Upload all files regardless of duplicate status
+  - `upload-originals-only`: Only upload original files, skip duplicates
+- **Duplicate Relationship Tracking**: Maintain relationships between original and duplicate files
+  - Files with `duplicate_of_gdrive_id` set are identified as duplicates
+  - Original files (no `duplicate_of_gdrive_id`) are processed normally
+  - Duplicate files are handled according to the selected strategy
+- **Cost Optimization**: Prevent redundant processing of duplicate content
+  - Avoid multiple API calls for the same content
+  - Reduce Humata.ai processing costs
+  - Maintain data consistency across duplicate sets
+- **Database Query Optimization**: Upload queries respect duplicate status
+  - When `skip-duplicates` is enabled, exclude files with `duplicate_of_gdrive_id` set
+  - When `upload-originals-only` is enabled, only process files without `duplicate_of_gdrive_id`
+  - When `upload-all` is enabled, process all files regardless of duplicate status
+- **User Experience**: Clear feedback on duplicate handling
+  - Report number of duplicates skipped during upload
+  - Show duplicate relationships in upload summary
+  - Provide guidance on duplicate strategy selection
 
 ### 3.4 Verify Command (`lib/humata_import/commands/verify.rb`)
 - **Purpose**: Phase 3 - Verify processing status of uploaded files
@@ -655,6 +679,14 @@ humata-import upload --folder-id abc123 --threads 16
 
 # Combined with retry settings
 humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-delay 8
+
+# Duplicate handling examples
+humata-import upload --folder-id abc123 --duplicate-strategy skip-duplicates
+humata-import upload --folder-id abc123 --duplicate-strategy upload-all
+humata-import upload --folder-id abc123 --duplicate-strategy upload-originals-only
+
+# Combined duplicate and performance settings
+humata-import upload --folder-id abc123 --duplicate-strategy skip-duplicates --threads 8 --batch-size 20
 ```
 
 ### 12.4.2 Retry Behavior Examples
@@ -710,6 +742,14 @@ humata-import upload --folder-id abc123 --threads 6 --max-retries 4 --retry-dela
 - **Cross-Session Duplicate Detection**: Detect duplicates across different import sessions using persistent duplicate tracking
 - **Performance Optimization**: Efficient duplicate detection using composite database indexes on (size, name, mime_type)
 - **User Experience**: Clear progress reporting and user guidance during duplicate detection process
+
+### 13.5 Discovery-Upload Phase Coordination for Duplicates
+- **Phase Separation**: Duplicate detection occurs during discovery phase, duplicate handling occurs during upload phase
+- **Database Schema Integration**: The `duplicate_of_gdrive_id` field links duplicate files to their originals
+- **Upload Phase Duplicate Logic**: Upload command respects duplicate status based on user-selected strategy
+- **Cost Optimization**: Prevents redundant Humata.ai processing by coordinating duplicate handling across phases
+- **Data Consistency**: Ensures duplicate relationships are maintained throughout the entire workflow
+- **User Control**: Provides granular control over duplicate handling at both discovery and upload phases
 
 ### 13.2 Enhanced Verify Command Implementation
 - **Database Schema Updates**: Add `humata_pages` field for storing page count
