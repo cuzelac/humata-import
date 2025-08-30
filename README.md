@@ -2,50 +2,49 @@
 
 A Ruby command-line tool for importing files from Google Drive folders into Humata.ai. Features recursive folder crawling, batch processing, comprehensive status tracking, and intelligent duplicate detection.
 
-## Features
+## What It Does
+
+This tool automates the process of importing publicly accessible files from Google Drive into Humata.ai for AI-powered document analysis. It works in three phases:
+
+1. **Discover** - Crawls Google Drive folders to find files
+2. **Upload** - Uploads discovered files to Humata.ai 
+3. **Verify** - Monitors processing status until completion
+
+The tool maintains a SQLite database to track progress, handle duplicates intelligently, and provide resumable operations.
+
+## Key Features
 
 - 🔍 **Google Drive Integration**
-  - Recursive folder crawling
-  - File type filtering
-  - Public URL extraction
+  - Recursive folder crawling with configurable limits
+  - File metadata extraction (name, size, type, timestamps)
+  - Public URL generation for Humata.ai processing
 
 - 📤 **Humata.ai Integration**
-  - Batch file uploading
-  - Processing status monitoring
-  - Rate limit compliance
+  - Batch file uploading with parallel processing
+  - Rate limit compliance (120 requests/minute)
+  - Processing status monitoring and verification
 
 - 📊 **Progress Tracking**
   - SQLite-based state management
-  - Detailed status reporting
-  - Multiple output formats (text/JSON/CSV)
+  - Detailed status reporting with multiple output formats
+  - Resumable operations across sessions
 
 - 🛠 **Robust Error Handling**
-  - Automatic retries with configurable limits
+  - Automatic retries with exponential backoff
   - Failed upload retry on subsequent runs
-  - Rate limiting
-  - Comprehensive error reporting
+  - Comprehensive error logging and reporting
 
 - 🔄 **Smart Duplicate Detection**
-  - Intelligent duplicate identification using file size + name + MIME type
-  - Configurable duplicate handling strategies (skip, upload, replace)
+  - Identifies duplicates using file size + name + MIME type
+  - Configurable handling strategies (skip, upload, replace, track)
   - Cross-session duplicate tracking
-  - Performance-optimized detection with composite database indexes
-  - Comprehensive duplicate reporting and analysis
+  - Performance-optimized with database indexes
 
 ## Prerequisites
 
-1. **Ruby**
-   - Ruby 2.7 or later
-   - Bundler gem installed
-
-2. **Google Drive**
-   - Google Cloud project
-   - Drive API enabled
-   - Service account with key file
-
-3. **Humata.ai**
-   - Active Humata.ai account
-   - API key
+1. **Ruby** - Ruby 2.7 or later with Bundler
+2. **Google Drive** - Service account with Drive API access
+3. **Humata.ai** - Active account with API key
 
 ## Installation
 
@@ -64,10 +63,7 @@ rake install
 
 1. **Set up credentials**
    ```bash
-   # Set Humata API key
    export HUMATA_API_KEY='your-api-key'
-
-   # Set Google application credentials
    export GOOGLE_APPLICATION_CREDENTIALS='path/to/service-account-key.json'
    ```
 
@@ -76,230 +72,107 @@ rake install
    humata-import run \
      "https://drive.google.com/drive/folders/your-folder-id" \
      --folder-id "your-humata-folder-id" \
-     --database ./import_session.db \
      --verbose
    ```
 
-   **Note**: The `run` command executes the complete workflow but doesn't support duplicate strategy options. Use the individual `discover` command for duplicate detection configuration.
-
 ## Usage
+
+### Complete Workflow
+```bash
+# Run all phases in sequence
+humata-import run <gdrive-url> --folder-id <humata-folder-id>
+```
 
 ### Individual Commands
 
-1. **Discover files with duplicate detection**
-   ```bash
-   humata-import discover \
-     "https://drive.google.com/drive/folders/your-folder-id" \
-     --database ./import_session.db \
-     --duplicate-strategy skip \
-     --show-duplicates
-   ```
-
-   **Duplicate handling strategies:**
-   - `--duplicate-strategy skip` - Skip duplicate files entirely (default)
-   - `--duplicate-strategy upload` - Upload duplicates and mark them as duplicates of originals
-   - `--duplicate-strategy replace` - Delete the original file and replace it with the new duplicate
-   - `--duplicate-strategy track-duplicates` - Track all files including duplicates for audit purposes
-   - `--show-duplicates` - Display detailed duplicate information
-
-   **Additional discover options:**
-   - `--recursive` / `--no-recursive` - Control subfolder crawling (default: recursive)
-   - `--max-files N` - Limit number of files to discover
-   - `--timeout SECONDS` - Discovery timeout (default: 300s)
-
-   **How duplicate strategies work:**
-   - **skip**: No duplicate files are stored in the database
-   - **upload**: Duplicates are stored with a reference to the original file
-   - **replace**: The original file is deleted and replaced with the new duplicate
-   - **track-duplicates**: All files are stored, with duplicates marked for tracking
-
-2. **Upload files**
-   ```bash
-   humata-import upload \
-     --folder-id "your-humata-folder-id" \
-     --batch-size 10 \
-     --database ./import_session.db
-   ```
-
-   **Upload options:**
-   - `--folder-id ID` - Humata folder ID (required)
-   - `--batch-size N` - Number of files to process in parallel (default: 10)
-   - `--threads N` - Number of concurrent upload threads (default: 4, max: 16)
-   - `--max-retries N` - Maximum retry attempts per file (default: 3)
-   - `--retry-delay N` - Base delay in seconds between retries (default: 5)
-   - `--id ID` - Upload only the file with this specific gdrive_id
-   - `--skip-retries` - Skip retrying failed uploads
-
-   **Retry failed uploads:**
-   ```bash
-   # Automatically retry failed uploads (default behavior)
-   humata-import upload \
-     --folder-id "your-humata-folder-id" \
-     --database ./import_session.db
-
-   # Skip retrying failed uploads
-   humata-import upload \
-     --folder-id "your-humata-folder-id" \
-     --skip-retries \
-     --database ./import_session.db
-   ```
-
-3. **Verify processing**
-   ```bash
-   humata-import verify \
-     --poll-interval 10 \
-     --timeout 1800 \
-     --database ./import_session.db
-   ```
-
-   **Verify options:**
-   - `--poll-interval N` - Seconds between status checks (default: 10)
-   - `--timeout N` - Verification timeout in seconds (default: 1800)
-   - `--batch-size N` - Number of files to check in parallel (default: 10)
-
-4. **Check status and duplicates**
-   ```bash
-   # Overall status
-   humata-import status \
-     --format text \
-     --database ./import_session.db
-
-   # Failed uploads only
-   humata-import status \
-     --failed-only \
-     --database ./import_session.db
-
-   # Export to CSV for analysis
-   humata-import status \
-     --format csv \
-     --output status_report.csv \
-     --database ./import_session.db
-   ```
-
-   **Status options:**
-   - `--format FORMAT` - Output format (text/json/csv, default: text)
-   - `--output FILE` - Write output to file
-   - `--filter STATUS` - Filter by status (completed/failed/pending/processing)
-   - `--failed-only` - Show only failed uploads with retry information
-
-### Duplicate Detection Features
-
-The tool provides comprehensive duplicate detection capabilities:
-
-- **Smart Detection**: Uses file size + name + MIME type combination for reliable identification
-- **Performance Optimized**: Composite database indexes ensure fast detection even with 10,000+ files
-- **Cross-Session Tracking**: Detects duplicates across different import sessions
-- **Flexible Handling**: Choose how to handle duplicates (skip, upload, or replace)
-- **Detailed Reporting**: Get comprehensive information about duplicate groups
-
-**Example duplicate detection output:**
+**Discover files:**
 ```bash
-🔄 Duplicate detected: document.pdf (same as: document.pdf)
-⏭️  Skipping duplicate file: document.pdf
-
-🎯 Discovery Summary:
-   Total files found: 150
-   New files added: 120
-   Existing files skipped: 20
-   Duplicate files detected: 10
-   Database now contains: 150 total files
-
-🔄 Duplicate Files Details:
-   📁 Group (3 files):
-      - document.pdf (1024000 bytes, application/pdf)
-      - document.pdf (1024000 bytes, application/pdf)
-      - document.pdf (1024000 bytes, application/pdf)
-      Hash: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+humata-import discover <gdrive-url> [options]
+# Options: --recursive, --max-files, --duplicate-strategy, --timeout
 ```
 
-### Common Options
+**Upload files:**
+```bash
+humata-import upload --folder-id <id> [options]
+# Options: --batch-size, --threads, --max-retries, --retry-delay
+```
 
-All commands support:
-- `--database PATH` - SQLite database file
-- `--verbose` - Enable detailed logging
-- `-h, --help` - Show command help
+**Verify processing:**
+```bash
+humata-import verify [options]
+# Options: --poll-interval, --timeout, --batch-size
+```
+
+**Check status:**
+```bash
+humata-import status [options]
+# Options: --format, --output, --filter, --failed-only
+```
+
+### Duplicate Handling
+
+The tool automatically detects duplicates during discovery and provides strategies:
+
+- `skip` - Skip duplicate files (default)
+- `upload` - Upload and mark as duplicates
+- `replace` - Replace original with duplicate
+- `track-duplicates` - Track all files with duplicate marking
+
+### Performance Options
+
+- **Parallel processing**: Up to 16 concurrent upload threads
+- **Batch operations**: Configurable batch sizes for discovery and upload
+- **Rate limiting**: Built-in compliance with Humata.ai API limits
+- **Retry logic**: Configurable retry attempts with exponential backoff
 
 ## Database Management
 
-The tool automatically manages database schema updates and provides utilities for data maintenance:
+The tool automatically manages its SQLite database. For existing databases, use the migration scripts:
 
 ```bash
-# Step 1: Update database schema (adds duplicate detection fields)
+# Update schema for new features
 ruby scripts/update_schema.rb [database_path]
 
-# Step 2: Populate file hashes for existing files
+# Populate data for existing records
 ruby scripts/populate_file_hashes.rb [database_path]
-
-# Step 3: Establish duplicate relationships for existing files
 ruby scripts/populate_duplicate_relationships.rb [database_path]
-
-# Step 4: Test duplicate detection system
-ruby scripts/test_duplicate_detection.rb [database_path]
 ```
 
-**Complete Migration Process:**
-1. **Schema Update**: Adds new columns and indexes for duplicate detection
-2. **Hash Population**: Computes file hashes for all existing records
-3. **Relationship Population**: Identifies and links existing duplicate files
-4. **Verification**: Tests the complete duplicate detection system
+## Architecture Overview
 
-**Note**: Run these scripts in order for old databases to get full duplicate detection functionality.
+The application is organized into several key components:
 
-## Documentation
+- **CLI Interface** (`lib/humata_import/cli.rb`) - Main entry point and command routing
+- **Commands** (`lib/humata_import/commands/`) - Individual command implementations
+- **Clients** (`lib/humata_import/clients/`) - API clients for Google Drive and Humata.ai
+- **Models** (`lib/humata_import/models/`) - Data models and database operations
+- **Database** (`lib/humata_import/database.rb`) - SQLite connection and schema management
+- **Utilities** (`lib/humata_import/utils/`) - Helper functions and URL processing
 
-- [User Guide](docs/user-guide.md) - Complete usage instructions
-- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
-- [Architecture Design](docs/architecture-design.md) - Technical details
+Each component follows dependency injection patterns for testability and uses Ruby's standard library where possible.
 
 ## Development
 
-### Setup
-
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/humata-import.git
+# Setup
+git clone <repository>
 cd humata-import
-
-# Install dependencies
 bundle install
 
-# Run tests
+# Testing
 bundle exec rake test
+bundle exec rake test_verbose  # For detailed logging
 ```
 
-### Testing
+## Documentation
 
-```bash
-# Run all tests
-bundle exec rake test
-
-# Run tests with verbose logging (shows all log levels)
-bundle exec rake test_verbose
-
-# Run specific test file
-bundle exec ruby -Ilib:test test/path/to/test_file.rb
-
-# Run with verbose output
-bundle exec rake test TESTOPTS="--verbose"
-```
-
-**Test Logging Behavior:**
-- By default, tests only show fatal-level log messages to keep output clean
-- Use `rake test_verbose` to see all log levels (debug, info, warn, error, fatal) during tests
-- This helps with debugging while keeping normal test runs quiet
-
-### Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Write tests for your changes
-4. Implement your changes
-5. Ensure tests pass
-6. Submit a pull request
+- [Functional Specification](specs/functional-specification.md) - Complete technical specification
+- [User Guide](docs/user-guide.md) - Detailed usage instructions
+- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
