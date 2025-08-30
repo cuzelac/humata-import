@@ -1,0 +1,204 @@
+---
+description: Script Documentation and README Maintenance Rule
+globs: scripts/*.rb
+alwaysApply: false
+---
+# Script Documentation and README Maintenance Rule
+
+## Description
+This rule ensures that all scripts in the `scripts/` directory have comprehensive documentation headers and that the `scripts/README.md` stays up to date with any changes to scripts.
+
+## Rule
+When creating or modifying scripts in the `scripts/` directory:
+
+1. **Script Documentation Headers**
+   - ALL scripts MUST have comprehensive documentation headers at the top
+   - Headers MUST include script purpose, usage, options, and requirements
+   - Headers MUST follow the established format with clear examples
+   - Headers MUST be placed immediately after shebang and frozen_string_literal
+
+2. **README.md Maintenance**
+   - ALL script changes MUST be reflected in `scripts/README.md`
+   - New scripts MUST be documented in the README with full details
+   - Script modifications MUST update corresponding README sections
+   - README MUST maintain accurate usage examples and requirements
+
+3. **Documentation Standards**
+   - Use consistent formatting and structure across all scripts
+   - Include practical examples and use cases
+   - Document all command-line options and parameters
+   - Specify environment variables and dependencies
+   - Provide troubleshooting guidance where applicable
+
+## Required Documentation Header Format
+
+### Basic Script Header Structure
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# [Script Name and Purpose]
+#
+# [Detailed description of what the script does]
+#
+# Usage:
+#   ruby scripts/[script_name].rb [parameters] [options]
+#   ruby scripts/[script_name].rb --example-param value
+#
+# Options:
+#   --param VALUE    Description of parameter
+#   -v, --verbose   Description of flag
+#
+# Requirements:
+#   - [Environment variable or dependency]
+#   - [System requirement or permission]
+#
+# Example:
+#   [Practical command example]
+```
+
+### Advanced Script Header Example
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Database Schema Update Script
+#
+# This script updates existing databases to match the current expected schema.
+# It can be run safely multiple times (idempotent operations).
+#
+# Usage:
+#   ruby scripts/update_schema.rb [database_path]
+#   ruby scripts/update_schema.rb ./import_session.db
+#
+# If no database path is provided, it will use ./import_session.db
+#
+# What It Does:
+#   - Creates automatic backups before any schema changes
+#   - Adds missing columns for new features
+#   - Creates missing indexes for performance optimization
+#   - Provides guidance on additional steps needed
+```
+
+## README.md Documentation Requirements
+
+### Script Section Structure
+```markdown
+### [Script Name] (`[filename].rb`)
+
+[Brief description of the script's purpose]
+
+#### Prerequisites
+- [List of requirements that must be met before running]
+
+#### Usage
+```bash
+# [Basic usage example]
+ruby scripts/[script_name].rb [parameters]
+
+# [Advanced usage example]
+ruby scripts/[script_name].rb [parameters] [options]
+```
+
+#### What It Does
+- [List of main functions and capabilities]
+- [Key features and behaviors]
+- [Expected outcomes]
+
+#### Options
+- `--param VALUE` - [Description of parameter]
+- `-v, --verbose` - [Description of flag]
+
+#### Requirements
+- [Environment variables needed]
+- [System dependencies]
+- [Permissions or access requirements]
+
+#### Example
+```bash
+[Complete working example with real values]
+```
+```
+
+## Implementation Guidelines
+
+### When Creating New Scripts
+1. **Create the script file** with proper documentation header
+2. **Add to README.md** in the appropriate category section
+3. **Include all required documentation elements**
+4. **Test the script** to ensure examples work correctly
+5. **Update any related sections** (execution order, dependencies, etc.)
+
+### When Modifying Existing Scripts
+1. **Update the script header** if functionality changes
+2. **Update README.md** to reflect any changes
+3. **Verify examples** still work with new functionality
+4. **Update related documentation** if dependencies change
+
+### When Removing Scripts
+1. **Remove the script file**
+2. **Remove from README.md** completely
+3. **Update any references** to the removed script
+4. **Update execution order** if applicable
+
+## Examples
+
+### ✅ Good: Complete Script Documentation
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# File Hash Population Script
+#
+# This script populates the file_hash column for existing database records
+# that were created before the duplicate detection feature was implemented.
+#
+# Usage:
+#   ruby scripts/populate_file_hashes.rb [database_path]
+#   ruby scripts/populate_file_hashes.rb ./import_session.db
+#
+# If no database path is provided, it will use ./import_session.db
+#
+# Prerequisites:
+#   - Run update_schema.rb first to add the file_hash column
+#   - Database must contain file records with size, name, and mime_type data
+#
+# What It Does:
+#   - Identifies records without file_hash values
+#   - Generates MD5 hashes using the same logic as the discovery process
+#   - Updates all existing records to enable duplicate detection
+#   - Provides progress reporting and error handling
+```
+
+### ❌ Bad: Insufficient Documentation
+```ruby
+#!/usr/bin/env ruby
+# Script to populate file hashes
+require 'sqlite3'
+# ... rest of script without proper header
+```
+
+## Benefits
+- **Consistent Documentation**: All scripts follow the same documentation pattern
+- **Easy Maintenance**: Clear structure makes updates straightforward
+- **User Experience**: Developers can quickly understand and use any script
+- **Project Quality**: Professional documentation reflects project standards
+- **Onboarding**: New team members can easily understand script purposes
+
+## Enforcement
+- Code review MUST reject scripts without proper documentation headers
+- README.md MUST be updated whenever scripts are modified
+- All script examples in README MUST be tested and working
+- Documentation MUST be kept in sync with actual script functionality
+
+## Related Rules
+- `ruby-documentation.mdc` - Ruby code documentation standards
+- `ruby-style.mdc` - Ruby code style and formatting
+- `database-management.mdc` - Database script standards
+
+## Notes
+- This rule ensures the scripts directory maintains professional documentation standards
+- All scripts should be self-documenting through comprehensive headers
+- README.md serves as the central reference for all script functionality
+- Regular review of documentation helps maintain project quality
+
