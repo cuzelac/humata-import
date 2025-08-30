@@ -1,8 +1,33 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Test script to diagnose hanging issues in the discover command
-# Usage: ruby scripts/test_discover_hang.rb <gdrive-url>
+# Discover Command Hang Diagnostic Tool
+#
+# This script diagnoses hanging issues in the discover command by testing
+# individual components in isolation with timeout protection.
+#
+# Usage:
+#   ruby scripts/test_discover_hang.rb <gdrive-url> [options]
+#   ruby scripts/test_discover_hang.rb "https://drive.google.com/drive/folders/abc123" --timeout 120
+#
+# Options:
+#   --timeout SECONDS    Timeout for authentication tests (default: 60)
+#
+# What It Tests:
+#   1. Environment setup and Ruby configuration
+#   2. Database initialization and connectivity
+#   3. Google Drive authentication process
+#   4. URL parsing and validation
+#   5. File listing functionality
+#
+# Requirements:
+#   - GOOGLE_APPLICATION_CREDENTIALS environment variable set
+#   - Valid Google Drive folder URL
+#   - Ruby dependencies installed via bundler
+#
+# Example:
+#   export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
+#   ruby scripts/test_discover_hang.rb "https://drive.google.com/drive/folders/abc123"
 
 require 'bundler/setup'
 require 'logger'

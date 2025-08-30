@@ -1,3 +1,26 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Humata PDF Retrieval Script
+#
+# This script retrieves PDF documents from the Humata API using a PDF ID.
+# It demonstrates basic HTTP client usage and API authentication.
+#
+# Usage:
+#   ruby scripts/humata_get_pdf.rb <pdf_id> [options]
+#   ruby scripts/humata_get_pdf.rb abc123 --verbose
+#
+# Options:
+#   -v, --verbose    Output HTTP status code and response body
+#
+# Requirements:
+#   - HUMATA_API_KEY environment variable must be set
+#   - Valid PDF ID from Humata system
+#
+# Example:
+#   export HUMATA_API_KEY="your_api_key_here"
+#   ruby scripts/humata_get_pdf.rb pdf_123 --verbose
+
 require 'net/http'
 require 'uri'
 require 'json'
