@@ -34,7 +34,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -63,7 +63,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles non-recursive discovery' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', false, nil]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', false, nil, 3, 5]
       
       args = ['--no-recursive', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -73,7 +73,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles max files limit' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, 5]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, 5, 3, 5]
       
       args = ['--max-files', '5', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -83,7 +83,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles timeout option' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['--timeout', '60', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -93,7 +93,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles verbose output' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       verbose_db = File.join(Dir.tmpdir, "discover_verbose_#{SecureRandom.hex(8)}.db")
       HumataImport::Database.initialize_schema(verbose_db)
@@ -114,7 +114,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles quiet output' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       quiet_db = File.join(Dir.tmpdir, "discover_quiet_#{SecureRandom.hex(8)}.db")
       HumataImport::Database.initialize_schema(quiet_db)
@@ -135,7 +135,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles empty file list' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, [], ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -158,7 +158,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -188,8 +188,8 @@ describe HumataImport::Commands::Discover do
       ]
       
       # Call list_files twice with the same files
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       # First run
       command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
@@ -206,7 +206,7 @@ describe HumataImport::Commands::Discover do
 
     it 'handles errors from GdriveClient' do
       gdrive_client = Minitest::Mock.new
-      gdrive_client.expect :list_files, nil do
+      gdrive_client.expect :list_files, nil do |folder_url, recursive, max_files, max_retries, retry_delay|
         raise HumataImport::GoogleDriveError, 'API error'
       end
       
@@ -233,11 +233,11 @@ describe HumataImport::Commands::Discover do
       ]
       
       # First run
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
       
       # Second run with same files
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       command.run(['https://drive.google.com/drive/folders/test_folder'], gdrive_client: gdrive_client)
 
       # Should only have one record due to idempotency
@@ -261,7 +261,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -299,7 +299,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -336,7 +336,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['--duplicate-strategy', 'skip', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -367,7 +367,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['--duplicate-strategy', 'upload', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -402,7 +402,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['--duplicate-strategy', 'replace', 'https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -437,7 +437,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
@@ -479,7 +479,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       # Create command with show_duplicates option
       show_duplicates_options = { database: File.join(Dir.tmpdir, "discover_show_duplicates_#{SecureRandom.hex(8)}.db") }
@@ -519,7 +519,7 @@ describe HumataImport::Commands::Discover do
         }
       ]
       
-      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil]
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
       
       args = ['https://drive.google.com/drive/folders/test_folder']
       command.run(args, gdrive_client: gdrive_client)
