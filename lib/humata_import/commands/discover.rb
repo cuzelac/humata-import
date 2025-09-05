@@ -42,7 +42,9 @@ module HumataImport
           max_files: nil,
           timeout: DEFAULT_TIMEOUT,
           duplicate_strategy: 'skip',
-          show_duplicates: false
+          show_duplicates: false,
+          max_retries: 3,
+          retry_delay: 5
         }
         parser = OptionParser.new do |opts|
           opts.banner = "Usage: humata-import discover <gdrive-url> [options]"
@@ -52,6 +54,8 @@ module HumataImport
           opts.on('--timeout SECONDS', Integer, 'Discovery timeout (default: 300s)') { |v| options[:timeout] = v }
           opts.on('--duplicate-strategy STRATEGY', %w[skip upload replace track-duplicates], 'How to handle duplicates: skip, upload, replace, or track-duplicates (default: skip)') { |v| options[:duplicate_strategy] = v }
           opts.on('--show-duplicates', 'Show detailed duplicate information') { options[:show_duplicates] = true }
+          opts.on('--max-retries N', Integer, 'Maximum retry attempts for API calls (default: 3)') { |v| options[:max_retries] = v }
+          opts.on('--retry-delay N', Integer, 'Base delay in seconds between retries (default: 5)') { |v| options[:retry_delay] = v }
           opts.on('-v', '--verbose', 'Enable verbose output') { @options[:verbose] = true }
           opts.on('-q', '--quiet', 'Suppress non-essential output') { @options[:quiet] = true }
         end
@@ -59,17 +63,23 @@ module HumataImport
         gdrive_url = args.shift
         raise ArgumentError, 'Missing Google Drive folder URL' unless gdrive_url
         
-        # Provide timeout guidance
+        # Provide timeout and retry guidance
         unless @options[:quiet]
           if options[:timeout] < 60
             puts "⚠️  Short timeout (#{options[:timeout]}s) - may not complete for large folders"
           elsif options[:timeout] > 1800
             puts "ℹ️  Extended timeout (#{options[:timeout]}s) - suitable for very large folders"
           end
+          
+          if options[:max_retries] > 5
+            puts "ℹ️  High retry count (#{options[:max_retries]}) - suitable for unstable networks"
+          elsif options[:max_retries] < 2
+            puts "⚠️  Low retry count (#{options[:max_retries]}) - may fail on transient errors"
+          end
         end
         
         client = gdrive_client || HumataImport::Clients::GdriveClient.new(timeout: options[:timeout])
-        files = client.list_files(gdrive_url, options[:recursive], options[:max_files])
+        files = client.list_files(gdrive_url, options[:recursive], options[:max_files], options[:max_retries], options[:retry_delay])
         
         # Initialize counters for progress reporting
         total_files = files.size
@@ -114,7 +124,7 @@ module HumataImport
               next
             when 'track-duplicates'
               # For track-duplicates strategy, create the file but mark it as duplicate
-              file_record = HumataImport::FileRecord.create(
+              HumataImport::FileRecord.create(
                 db,
                 gdrive_id: file[:id],
                 name: file[:name],
@@ -134,7 +144,7 @@ module HumataImport
               puts "🔄 Replacing existing file: #{duplicate_info[:duplicate_name]}" if @options[:verbose] && !@options[:quiet]
               
               # Create the new file record
-              file_record = HumataImport::FileRecord.create(
+              HumataImport::FileRecord.create(
                 db,
                 gdrive_id: file[:id],
                 name: file[:name],
@@ -151,7 +161,7 @@ module HumataImport
               added_files += 1
             when 'upload'
               # For upload strategy, create the file but mark it as duplicate
-              file_record = HumataImport::FileRecord.create(
+              HumataImport::FileRecord.create(
                 db,
                 gdrive_id: file[:id],
                 name: file[:name],
@@ -169,7 +179,7 @@ module HumataImport
             end
           else
             # No duplicate found, create the file record normally
-            file_record = HumataImport::FileRecord.create(
+            HumataImport::FileRecord.create(
               db,
               gdrive_id: file[:id],
               name: file[:name],

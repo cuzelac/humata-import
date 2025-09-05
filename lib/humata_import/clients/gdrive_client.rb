@@ -81,11 +81,13 @@ module HumataImport
       # @param folder_url [String] The URL of the Google Drive folder
       # @param recursive [Boolean] Whether to list files recursively in subfolders (default: true)
       # @param max_files [Integer, nil] Maximum number of files to collect (nil for unlimited)
+      # @param max_retries [Integer] Maximum retry attempts for API calls (default: 3)
+      # @param retry_delay [Integer] Base delay in seconds between retries (default: 5)
       # @return [Array<Hash>] Array of file metadata hashes
       # @raise [HumataImport::ValidationError] If folder URL is invalid
       # @raise [HumataImport::GoogleDriveError] If API request fails
       # @raise [HumataImport::NetworkError] If network communication fails
-      def list_files(folder_url, recursive = true, max_files = nil)
+      def list_files(folder_url, recursive = true, max_files = nil, max_retries = 3, retry_delay = 5)
         validate_folder_url(folder_url)
         
         @logger.debug "Extracting folder ID from URL: #{folder_url}"
@@ -94,8 +96,9 @@ module HumataImport
         
         @logger.info "Starting file discovery in folder: #{folder_id}"
         @logger.info "Max files limit: #{max_files || 'unlimited'}"
+        @logger.info "Retry configuration: max_retries=#{max_retries}, retry_delay=#{retry_delay}s"
         files = []
-        crawl_folder(folder_id, files, recursive, max_files)
+        crawl_folder(folder_id, files, recursive, max_files, max_retries, retry_delay)
         @logger.info "Completed file discovery. Found #{files.size} files"
         files
       end
@@ -117,15 +120,18 @@ module HumataImport
       # @param files [Array<Hash>] The array to collect file metadata
       # @param recursive [Boolean] Whether to crawl subfolders
       # @param max_files [Integer, nil] Maximum number of files to collect (nil for unlimited)
+      # @param max_retries [Integer] Maximum retry attempts for API calls (default: 3)
+      # @param retry_delay [Integer] Base delay in seconds between retries (default: 5)
       # @return [void]
       # @raise [HumataImport::GoogleDriveError] If API request fails
       # @raise [HumataImport::NetworkError] If network communication fails
-      def crawl_folder(folder_id, files, recursive, max_files = nil)
+      def crawl_folder(folder_id, files, recursive, max_files = nil, max_retries = 3, retry_delay = 5)
         @logger.debug "Crawling folder: #{folder_id}"
         page_token = nil
         page_count = 0
         total_items = 0
         
+        retries = 0
         begin
           loop do
             page_count += 1
@@ -149,7 +155,7 @@ module HumataImport
                   # Handle folders
                   if recursive
                     # Recursively crawl subfolders if enabled
-                    crawl_folder(file.id, files, recursive, max_files)
+                    crawl_folder(file.id, files, recursive, max_files, max_retries, retry_delay)
                     return if max_files && files.size >= max_files
                   end
                   # Skip folders if not recursive (they're not added to results)
@@ -185,23 +191,68 @@ module HumataImport
         rescue Google::Apis::Error => e
           case e.message
           when /rate limit/i
-            raise HumataImport::TransientError, "Rate limit exceeded: #{e.message}"
+            error = HumataImport::TransientError, "Rate limit exceeded: #{e.message}"
           when /unauthorized|forbidden/i
-            raise HumataImport::AuthenticationError, "Authorization failed: #{e.message}"
+            error = HumataImport::AuthenticationError, "Authorization failed: #{e.message}"
           when /invalid|bad request/i
-            raise HumataImport::ValidationError, "Invalid request: #{e.message}"
+            error = HumataImport::ValidationError, "Invalid request: #{e.message}"
           when /server error|internal error/i
-            raise HumataImport::TransientError, "Server error: #{e.message}"
+            error = HumataImport::TransientError, "Server error: #{e.message}"
           else
-            raise HumataImport::GoogleDriveError, "Google Drive API error: #{e.message}"
+            error = HumataImport::GoogleDriveError, "Google Drive API error: #{e.message}"
+          end
+          
+          # Handle retryable errors
+          if error[0] == HumataImport::TransientError && retries < max_retries
+            retries += 1
+            delay = calculate_retry_delay(retry_delay, retries)
+            @logger.warn "Transient error (attempt #{retries}/#{max_retries}): #{error[1]}. Retrying in #{delay}s..."
+            sleep(delay)
+            retry
+          else
+            raise error[0], error[1]
           end
         rescue Net::OpenTimeout, Net::ReadTimeout => e
-          raise HumataImport::NetworkError, "Request timeout: #{e.message}"
+          if retries < max_retries
+            retries += 1
+            delay = calculate_retry_delay(retry_delay, retries)
+            @logger.warn "Request timeout (attempt #{retries}/#{max_retries}): #{e.message}. Retrying in #{delay}s..."
+            sleep(delay)
+            retry
+          else
+            raise HumataImport::NetworkError, "Request timeout: #{e.message}"
+          end
         rescue SocketError, Errno::ECONNREFUSED => e
-          raise HumataImport::NetworkError, "Connection failed: #{e.message}"
+          if retries < max_retries
+            retries += 1
+            delay = calculate_retry_delay(retry_delay, retries)
+            @logger.warn "Connection failed (attempt #{retries}/#{max_retries}): #{e.message}. Retrying in #{delay}s..."
+            sleep(delay)
+            retry
+          else
+            raise HumataImport::NetworkError, "Connection failed: #{e.message}"
+          end
         rescue StandardError => e
-          raise HumataImport::NetworkError, "Network error: #{e.message}"
+          if retries < max_retries
+            retries += 1
+            delay = calculate_retry_delay(retry_delay, retries)
+            @logger.warn "Network error (attempt #{retries}/#{max_retries}): #{e.message}. Retrying in #{delay}s..."
+            sleep(delay)
+            retry
+          else
+            raise HumataImport::NetworkError, "Network error: #{e.message}"
+          end
         end
+      end
+
+      # Calculates retry delay using exponential backoff.
+      #
+      # @param base_delay [Integer] Base delay in seconds
+      # @param retry_number [Integer] Current retry attempt number
+      # @return [Integer] Calculated delay in seconds (capped at 300 seconds)
+      def calculate_retry_delay(base_delay, retry_number)
+        delay = base_delay * (2 ** (retry_number - 1))
+        [delay, 300].min # Cap at 5 minutes
       end
 
       # Extracts the folder ID from a Google Drive folder URL.
