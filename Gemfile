@@ -6,6 +6,7 @@ gem 'google-api-client', '~> 0.53'
 gem 'csv', '~> 3.2'  # Required for Ruby 3.4+ compatibility
 
 group :development, :test do
+  # Testing framework: minitest (not RSpec) - see .cursor/rules/ruby-testing.mdc
   gem 'minitest', '~> 5.18'
   gem 'minitest-hooks', '~> 1.5'
   gem 'webmock', '~> 3.18'

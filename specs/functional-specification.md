@@ -152,7 +152,7 @@ The system provides a reliable, scalable solution for bulk document ingestion fr
 - `--folder-id ID`: Humata folder ID (required)
 - `--id ID`: Upload specific file by gdrive_id
 - `--batch-size N`: Files to process in parallel (default: 10)
-- `--threads N`: Number of concurrent upload threads (default: 4, max: 16)
+- `--threads N`: Number of concurrent upload threads (default: 10, max: 16)
 - `--max-retries N`: Maximum retry attempts (default: 3)
 - `--retry-delay N`: Seconds between retries (default: 5)
 - `--skip-retries`: Skip retrying failed uploads
@@ -531,7 +531,7 @@ To enhance the robustness of the application, the following improvements are rec
 ### 9.1 Expected Performance
 - **Discovery**: ~100 files/second (Google Drive API limited)
 - **Upload**: ~5-10 files/second (Humata API rate limited)
-- **Upload (Parallel)**: ~20-40 files/second with 4 threads (4x improvement)
+- **Upload (Parallel)**: ~20-40 files/second with 10 threads (4x improvement)
 - **Verification**: ~120 status checks/minute (Humata API limit)
 - **Database**: Handles 10,000+ files efficiently
 
@@ -541,7 +541,7 @@ To enhance the robustness of the application, the following improvements are rec
 - **Database Size**: SQLite handles millions of records
 - **Memory Usage**: Minimal (only active batch in memory)
 - **Concurrent Operations**: Configurable batch sizes for parallel processing
-- **Thread Scaling**: Optimal performance with 4 threads, diminishing returns beyond 8 threads
+- **Thread Scaling**: Optimal performance with 10 threads, diminishing returns beyond 12 threads
 
 ### 9.3 Resource Requirements
 - **Disk Space**: ~1KB per file record + database overhead
@@ -665,7 +665,7 @@ humata-import upload --folder-id abc123 --skip-retries
 
 ### 12.4.2 Parallelization Configuration
 ```bash
-# Default parallel processing (4 threads)
+# Default parallel processing (10 threads)
 humata-import upload --folder-id abc123
 
 # Single-threaded processing (sequential)

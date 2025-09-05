@@ -42,7 +42,7 @@ module HumataImport
     #     failures and is distinct from processing_status which tracks Humata processing state.
     class Upload < Base
       # @return [Integer] Default number of concurrent threads
-      DEFAULT_THREADS = 4
+      DEFAULT_THREADS = 10
       
       # @return [Integer] Maximum number of threads allowed
       MAX_THREADS = 16
@@ -104,7 +104,7 @@ module HumataImport
           opts.on('--folder-id ID', String, 'Humata folder ID (required)') { |v| options[:folder_id] = v }
           opts.on('--id ID', String, 'Upload only the file with this specific gdrive_id') { |v| options[:file_id] = v }
           opts.on('--batch-size N', Integer, 'Number of files to process in parallel (default: 10)') { |v| options[:batch_size] = v }
-          opts.on('--threads N', Integer, 'Number of concurrent upload threads (default: 4, max: 16)') { |v| options[:threads] = v }
+          opts.on('--threads N', Integer, 'Number of concurrent upload threads (default: 10, max: 16)') { |v| options[:threads] = v }
           opts.on('--max-retries N', Integer, 'Maximum retry attempts per file (default: 3)') { |v| options[:max_retries] = v }
           opts.on('--retry-delay N', Integer, 'Base delay in seconds between retries (default: 5)') { |v| options[:retry_delay] = v }
           opts.on('--skip-retries', 'Skip retrying failed uploads') { options[:skip_retries] = true }
