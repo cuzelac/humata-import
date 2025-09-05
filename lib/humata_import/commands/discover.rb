@@ -86,6 +86,7 @@ module HumataImport
         skipped_files = 0
         added_files = 0
         duplicate_files = 0
+        new_duplicate_files = 0  # Duplicates among newly added files
         
         puts "🔍 Discovering files in Google Drive folder..." unless @options[:quiet]
         puts "📁 Found #{total_files} files to process" if @options[:verbose] && !@options[:quiet]
@@ -139,6 +140,7 @@ module HumataImport
               db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
               
               added_files += 1
+              new_duplicate_files += 1
             when 'replace'
               # For replace strategy, create the file but mark it as duplicate
               puts "🔄 Replacing existing file: #{duplicate_info[:duplicate_name]}" if @options[:verbose] && !@options[:quiet]
@@ -159,6 +161,7 @@ module HumataImport
               db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
               
               added_files += 1
+              new_duplicate_files += 1
             when 'upload'
               # For upload strategy, create the file but mark it as duplicate
               HumataImport::FileRecord.create(
@@ -176,6 +179,7 @@ module HumataImport
               db.execute("UPDATE file_records SET duplicate_of_gdrive_id = ? WHERE gdrive_id = ?", [duplicate_info[:duplicate_of_gdrive_id], file[:id]])
               
               added_files += 1
+              new_duplicate_files += 1
             end
           else
             # No duplicate found, create the file record normally
@@ -208,6 +212,7 @@ module HumataImport
           puts "   New files added: #{added_files}"
           puts "   Existing files skipped: #{skipped_files}"
           puts "   Duplicate files detected: #{duplicate_files}"
+          puts "   New files that were duplicates: #{new_duplicate_files}"
           puts "   Database now contains: #{HumataImport::FileRecord.all(db).size} total files"
           
           # Show duplicate details if requested

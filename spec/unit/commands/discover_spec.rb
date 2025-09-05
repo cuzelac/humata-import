@@ -536,5 +536,56 @@ describe HumataImport::Commands::Discover do
       
       gdrive_client.verify
     end
+
+    it 'tracks duplicates among newly added files correctly' do
+      gdrive_client = Minitest::Mock.new
+      mock_files = [
+        {
+          id: 'file1',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file1/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file2',
+          name: 'document.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file2/view',
+          size: 1024,
+          mimeType: 'application/pdf'
+        },
+        {
+          id: 'file3',
+          name: 'unique.pdf',
+          webContentLink: 'https://drive.google.com/file/d/file3/view',
+          size: 2048,
+          mimeType: 'application/pdf'
+        }
+      ]
+      
+      gdrive_client.expect :list_files, mock_files, ['https://drive.google.com/drive/folders/test_folder', true, nil, 3, 5]
+      
+      # Test with track-duplicates strategy to ensure duplicates are added
+      args = ['--duplicate-strategy', 'track-duplicates', 'https://drive.google.com/drive/folders/test_folder']
+      command.run(args, gdrive_client: gdrive_client)
+
+      # All 3 files should be added
+      records = command.db.execute("SELECT gdrive_id, duplicate_of_gdrive_id FROM file_records ORDER BY gdrive_id")
+      assert_equal 3, records.size
+      
+      # file1 should be original (no duplicate_of_gdrive_id)
+      file1 = records.find { |r| r[0] == 'file1' }
+      assert_nil file1[1] # duplicate_of_gdrive_id should be nil
+      
+      # file2 should be marked as duplicate of file1
+      file2 = records.find { |r| r[0] == 'file2' }
+      assert_equal 'file1', file2[1] # duplicate_of_gdrive_id should point to file1
+      
+      # file3 should be original (no duplicate_of_gdrive_id)
+      file3 = records.find { |r| r[0] == 'file3' }
+      assert_nil file3[1] # duplicate_of_gdrive_id should be nil
+      
+      gdrive_client.verify
+    end
   end
 end 
